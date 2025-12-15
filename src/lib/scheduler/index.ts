@@ -3,23 +3,45 @@
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
+let lastRunAt: Date | null = null;
+let runCount = 0;
 
 async function runCronJob() {
-  if (isRunning) return;
+  if (isRunning) {
+    console.log("[Scheduler] Skipping - already running");
+    return;
+  }
   isRunning = true;
+  runCount++;
 
   try {
+    console.log(`[Scheduler] Running cron job #${runCount} at ${new Date().toISOString()}`);
+    
     // Use internal function call instead of HTTP to avoid issues during SSR
     const { evaluateAlerts } = await import("@/lib/alerts/evaluator");
     const { recordUptimeCheck } = await import("@/lib/uptime/tracker");
 
-    await recordUptimeCheck();
+    const uptimeResult = await recordUptimeCheck();
+    console.log(`[Scheduler] Uptime check recorded ${uptimeResult.length} services`);
+    
     await evaluateAlerts();
+    console.log("[Scheduler] Alert evaluation completed");
+    
+    lastRunAt = new Date();
   } catch (error) {
     console.error("[Scheduler] Error running cron job:", error);
   } finally {
     isRunning = false;
   }
+}
+
+export function getSchedulerStatus() {
+  return {
+    running: intervalId !== null,
+    lastRunAt,
+    runCount,
+    isCurrentlyRunning: isRunning,
+  };
 }
 
 export function startScheduler(intervalMs: number = 30000) {
