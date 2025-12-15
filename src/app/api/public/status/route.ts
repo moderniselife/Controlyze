@@ -66,6 +66,8 @@ const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   jellyfin: "Media Server",
   emby: "Media Server",
   portainer: "Container Management",
+  controlyze: "Container Management",
+  threadfin: "Live TV/DVR",
   traefik: "Reverse Proxy",
   nginx: "Web Server",
   pihole: "Ad Blocking",
@@ -98,30 +100,35 @@ const SERVICE_ICONS: Record<string, string> = {
   "cloudflare-tunnel": "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/cloudflare.svg",
   watchtower: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/watchtower.svg",
   flaresolverr: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/flaresolverr.svg",
+  controlyze: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/docker.svg",
+  threadfin: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/threadfin.svg",
 };
 
 const SERVICE_GROUPS: Record<string, string> = {
   plex: "Media",
+  jellyfin: "Media",
+  emby: "Media",
   overseerr: "Media",
   tautulli: "Media",
   tunarr: "Media",
+  threadfin: "Media",
   prowlarr: "Indexing",
+  sonarr: "Indexing",
+  radarr: "Indexing",
+  lidarr: "Indexing",
+  readarr: "Indexing",
+  bazarr: "Indexing",
   schrodrive: "Automation",
+  watchtower: "Automation",
   "cloudflare-tunnel": "Infrastructure",
+  flaresolverr: "Infrastructure",
   "flaresolverr-lb": "Infrastructure",
+  controlyze: "Infrastructure",
+  portainer: "Infrastructure",
+  traefik: "Infrastructure",
+  nginx: "Infrastructure",
   pd_zurg: "Storage",
-  watchtower: "Maintenance",
 };
-
-const PUBLIC_SERVICES = [
-  "plex",
-  "overseerr",
-  "tautulli",
-  "tunarr",
-  "prowlarr",
-  "schrodrive",
-  "cloudflare-tunnel",
-];
 
 function getServiceStatus(
   state: string,
@@ -168,19 +175,24 @@ export async function GET() {
 
     const serviceMap = new Map<string, PublicServiceStatus>();
 
+    // Get list of known services from display names
+    const knownServices = Object.keys(SERVICE_DISPLAY_NAMES);
+
     for (const container of containers) {
       const serviceName = container.serviceName || container.name;
       const lowerName = serviceName.toLowerCase();
 
-      if (
-        PUBLIC_SERVICES.some(
-          (ps) => lowerName.includes(ps) || lowerName === ps
-        )
-      ) {
-        const matchedService =
-          PUBLIC_SERVICES.find(
-            (ps) => lowerName.includes(ps) || lowerName === ps
-          ) || serviceName;
+      // Match against known services
+      const matchedService = knownServices.find(
+        (ks) => lowerName.includes(ks) || lowerName === ks
+      );
+
+      if (matchedService) {
+        // Check if this service is enabled in config (default to enabled)
+        const svcConfig = serviceConfigs[matchedService];
+        if (svcConfig && !svcConfig.enabled) {
+          continue; // Skip disabled services
+        }
 
         const containerInfo: ContainerInfo = {
           id: container.id,
