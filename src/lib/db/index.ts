@@ -132,15 +132,30 @@ sqlite.exec(`
     created_at INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS uptime_checks (
+  CREATE TABLE IF NOT EXISTS alert_events (
+    id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL,
+    container_id TEXT,
+    stack_name TEXT,
+    service_name TEXT,
+    severity TEXT NOT NULL,
+    message TEXT NOT NULL,
+    details TEXT,
+    acknowledged INTEGER DEFAULT 0,
+    acknowledged_by TEXT,
+    acknowledged_at INTEGER,
+    incident_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS uptime_records (
     id TEXT PRIMARY KEY,
     service_name TEXT NOT NULL,
     status TEXT NOT NULL,
     checked_at INTEGER NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS idx_uptime_checks_service ON uptime_checks(service_name);
-  CREATE INDEX IF NOT EXISTS idx_uptime_checks_time ON uptime_checks(checked_at);
+  CREATE INDEX IF NOT EXISTS idx_uptime_service_time ON uptime_records(service_name, checked_at);
 `);
 
 export const db = drizzle(sqlite, { schema });

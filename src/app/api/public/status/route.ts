@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { listContainers } from "@/lib/docker/containers";
-import { listStacks } from "@/lib/docker/stacks";
-import { loadConfig } from "@/lib/config";
-import { getUptimeStats, recordUptimeCheck } from "@/lib/uptime/tracker";
+import { getOverallUptime } from "@/lib/uptime/tracker";
+import { db } from "@/lib/db";
+import { incidents } from "@/lib/db/schema";
+import { desc, gte } from "drizzle-orm";
 
 export interface ContainerInfo {
   id: string;
@@ -201,18 +202,42 @@ export async function GET() {
       );
     });
 
-    const mockIncidents: PublicIncident[] = [];
+    // Fetch real uptime data
+    const [uptime24h, uptime7d, uptime30d] = await Promise.all([
+      getOverallUptime(24),
+      getOverallUptime(24 * 7),
+      getOverallUptime(24 * 30),
+    ]);
 
-    // Record this check and get real uptime stats
-    await recordUptimeCheck();
-    const uptime = await getUptimeStats();
+    // Fetch recent incidents from database
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const recentIncidents = await db
+      .select()
+      .from(incidents)
+      .where(gte(incidents.createdAt, sevenDaysAgo))
+      .orderBy(desc(incidents.createdAt))
+      .limit(10);
+
+    const publicIncidents: PublicIncident[] = recentIncidents.map((inc) => ({
+      id: inc.id,
+      title: inc.title,
+      status: inc.status === "resolved" ? "resolved" : inc.status === "mitigated" ? "monitoring" : "investigating",
+      severity: inc.severity === "critical" ? "critical" : inc.severity === "high" ? "major" : "minor",
+      createdAt: inc.createdAt.toISOString(),
+      updatedAt: inc.updatedAt.toISOString(),
+      resolvedAt: inc.resolvedAt?.toISOString(),
+    }));
 
     const response: PublicStatusResponse = {
       overall: getOverallStatus(services),
       lastUpdated: new Date().toISOString(),
       services,
-      incidents: mockIncidents,
-      uptime,
+      incidents: publicIncidents,
+      uptime: {
+        last24h: uptime24h,
+        last7d: uptime7d,
+        last30d: uptime30d,
+      },
     };
 
     return NextResponse.json(response, {

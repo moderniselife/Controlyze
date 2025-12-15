@@ -189,12 +189,12 @@ export type NewContainerMetric = typeof containerMetrics.$inferInsert;
 export type HostMetric = typeof hostMetrics.$inferSelect;
 export type NewHostMetric = typeof hostMetrics.$inferInsert;
 
-export const uptimeChecks = sqliteTable("uptime_checks", {
+export const uptimeRecords = sqliteTable("uptime_records", {
   id: text("id").primaryKey(),
   serviceName: text("service_name").notNull(),
   status: text("status").notNull(), // operational, degraded, down
   checkedAt: integer("checked_at", { mode: "timestamp" }).notNull(),
 });
 
-export type UptimeCheck = typeof uptimeChecks.$inferSelect;
-export type NewUptimeCheck = typeof uptimeChecks.$inferInsert;
+export type UptimeRecord = typeof uptimeRecords.$inferSelect;
+export type NewUptimeRecord = typeof uptimeRecords.$inferInsert;
