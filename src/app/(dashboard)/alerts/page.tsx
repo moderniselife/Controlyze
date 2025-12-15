@@ -14,6 +14,8 @@ import {
   RotateCcw,
   RefreshCw,
   Loader2,
+  Clock,
+  CheckCircle,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,19 @@ interface AlertRule {
   lastTriggeredAt: Date | null;
 }
 
+interface AlertEvent {
+  id: string;
+  alertId: string;
+  alertName: string | null;
+  containerId: string | null;
+  serviceName: string | null;
+  severity: string;
+  message: string;
+  acknowledged: boolean;
+  incidentId: string | null;
+  createdAt: Date;
+}
+
 const conditionIcons: Record<string, React.ReactNode> = {
   health_status: <AlertTriangle className="h-4 w-4" />,
   restart_count: <RotateCcw className="h-4 w-4" />,
@@ -69,10 +84,12 @@ const conditionIcons: Record<string, React.ReactNode> = {
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertRule[]>([]);
+  const [alertEvents, setAlertEvents] = useState<AlertEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState<AlertRule | null>(null);
+  const [activeTab, setActiveTab] = useState<"rules" | "events">("rules");
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -96,6 +113,7 @@ export default function AlertsPage() {
 
   useEffect(() => {
     fetchAlerts();
+    fetchAlertEvents();
   }, []);
 
   const fetchAlerts = async () => {
@@ -110,6 +128,18 @@ export default function AlertsPage() {
       toast.error("Failed to load alerts");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchAlertEvents = async () => {
+    try {
+      const response = await fetch("/api/alerts/events?limit=50");
+      const data = await response.json();
+      if (data.success) {
+        setAlertEvents(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch alert events:", error);
     }
   };
 
@@ -253,23 +283,51 @@ export default function AlertsPage() {
     setDialogOpen(true);
   };
 
+  const unacknowledgedCount = alertEvents.filter((e) => !e.acknowledged).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Alert Rules</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Alerts</h2>
           <p className="text-muted-foreground">
-            Configure alerts for container health, performance, and logs
+            Monitor triggered alerts and configure alert rules
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNewDialog}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Rule
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border p-1">
+            <Button
+              variant={activeTab === "events" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("events")}
+              className="relative"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Events
+              {unacknowledgedCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-xs flex items-center justify-center text-white">
+                  {unacknowledgedCount}
+                </span>
+              )}
             </Button>
-          </DialogTrigger>
-          <DialogContent>
+            <Button
+              variant={activeTab === "rules" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("rules")}
+            >
+              <Activity className="h-4 w-4 mr-2" />
+              Rules
+            </Button>
+          </div>
+          {activeTab === "rules" && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={openNewDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Rule
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingAlert ? "Edit Alert" : "Create Alert"}</DialogTitle>
               <DialogDescription>
@@ -492,12 +550,88 @@ export default function AlertsPage() {
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 {editingAlert ? "Update Alert" : "Create Alert"}
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+              </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
-      {isLoading ? (
+      {activeTab === "events" && (
+        <div className="space-y-4">
+          {alertEvents.length === 0 ? (
+            <Card className="bg-card/50">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No triggered alerts</h3>
+                <p className="text-muted-foreground text-center max-w-md">
+                  When alerts are triggered, they will appear here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {alertEvents.map((event) => (
+                <Card key={event.id} className="bg-card/50">
+                  <CardContent className="py-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`p-2 rounded-lg ${
+                            event.severity === "critical"
+                              ? "bg-red-500/10"
+                              : event.severity === "warning"
+                              ? "bg-yellow-500/10"
+                              : "bg-blue-500/10"
+                          }`}
+                        >
+                          <AlertTriangle
+                            className={`h-4 w-4 ${
+                              event.severity === "critical"
+                                ? "text-red-500"
+                                : event.severity === "warning"
+                                ? "text-yellow-500"
+                                : "text-blue-500"
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {event.alertName || "Alert"}
+                            <SeverityBadge severity={event.severity as "info" | "warning" | "critical"} />
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {event.message}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(event.createdAt).toLocaleString()}
+                            </div>
+                            {event.serviceName && (
+                              <Badge variant="outline" className="text-xs">
+                                {event.serviceName}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {event.acknowledged && (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Acknowledged
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "rules" && (isLoading ? (
         <div className="flex items-center justify-center py-12">
           <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -593,7 +727,7 @@ export default function AlertsPage() {
           </Card>
         ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }
