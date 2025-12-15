@@ -1,8 +1,8 @@
-import { listContainers } from "@/lib/docker/containers";
+import { listContainers, getContainerStats, getContainerLogs } from "@/lib/docker/containers";
 import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
 import { alerts, incidents, alertEvents, tickets } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 interface AlertRule {
@@ -15,6 +15,7 @@ interface AlertRule {
   routing: Record<string, any> | null;
   cooldownMinutes: number;
   dedupEnabled: boolean;
+  dedupWindowMinutes: number;
   lastTriggeredAt: Date | null;
   source?: string;
 }
@@ -25,6 +26,8 @@ interface Container {
   state: string;
   healthStatus?: string;
   restartCount?: number;
+  cpuPercent?: number;
+  memoryPercent?: number;
 }
 
 interface EvaluationResult {
@@ -37,7 +40,47 @@ interface EvaluationResult {
   severity: string;
 }
 
+// Cooldown cache: alertId -> timestamp
 const cooldownCache = new Map<string, number>();
+
+// Dedup cache: alertId:containerId -> timestamp (for per-alert dedup windows)
+const dedupCache = new Map<string, number>();
+
+// Duration tracking: alertId:containerId -> first triggered timestamp
+const durationCache = new Map<string, number>();
+
+// Restart tracking: containerId -> { count, windowStart }
+const restartWindowCache = new Map<string, { count: number; windowStart: number }>();
+
+// Parse duration string like "30s", "2m", "1h" to milliseconds
+function parseDuration(duration: string | undefined): number {
+  if (!duration) return 0;
+  const match = duration.match(/^(\d+)(s|m|h)$/);
+  if (!match) return 0;
+  const value = parseInt(match[1], 10);
+  switch (match[2]) {
+    case "s": return value * 1000;
+    case "m": return value * 60 * 1000;
+    case "h": return value * 60 * 60 * 1000;
+    default: return 0;
+  }
+}
+
+// Check if container name matches filter (supports wildcards like "flaresolverr*")
+function matchesContainerFilter(containerName: string, filter: string | undefined): boolean {
+  if (!filter) return true; // No filter = match all
+  const lowerName = containerName.toLowerCase();
+  const lowerFilter = filter.toLowerCase();
+  
+  if (lowerFilter.endsWith("*")) {
+    // Wildcard match
+    const prefix = lowerFilter.slice(0, -1);
+    return lowerName.startsWith(prefix) || lowerName.includes(prefix);
+  }
+  
+  // Exact match (case insensitive)
+  return lowerName === lowerFilter || lowerName.includes(lowerFilter);
+}
 
 async function sendDiscordNotification(
   webhookUrl: string,
@@ -117,34 +160,80 @@ async function createLinearTicket(
   return null;
 }
 
-function evaluateCondition(
+async function evaluateCondition(
   conditionType: string,
   conditionConfig: Record<string, any>,
-  container: Container
-): { triggered: boolean; message: string } {
+  container: Container,
+  alertId: string
+): Promise<{ triggered: boolean; message: string }> {
+  const durationKey = `${alertId}:${container.id}`;
+  const requiredDurationMs = parseDuration(conditionConfig.duration);
+  
   switch (conditionType) {
     case "health_status": {
       const targetStatus = conditionConfig.status || "unhealthy";
       if (container.healthStatus === targetStatus) {
+        // Check duration requirement
+        if (requiredDurationMs > 0) {
+          const firstTriggered = durationCache.get(durationKey);
+          if (!firstTriggered) {
+            durationCache.set(durationKey, Date.now());
+            return { triggered: false, message: "" }; // Not triggered yet, waiting for duration
+          }
+          if (Date.now() - firstTriggered < requiredDurationMs) {
+            return { triggered: false, message: "" }; // Duration not met yet
+          }
+        }
+        durationCache.delete(durationKey); // Clear duration tracking
         return {
           triggered: true,
           message: `Container ${container.name} is ${targetStatus}`,
         };
+      } else {
+        durationCache.delete(durationKey); // Condition cleared, reset duration
       }
       break;
     }
+    
     case "restart_count": {
       const threshold = conditionConfig.threshold || 3;
-      if ((container.restartCount || 0) >= threshold) {
+      const windowMs = parseDuration(conditionConfig.window) || 5 * 60 * 1000; // Default 5m
+      
+      // Track restarts within window
+      const restartData = restartWindowCache.get(container.id);
+      const currentRestarts = container.restartCount || 0;
+      
+      if (!restartData) {
+        restartWindowCache.set(container.id, { count: currentRestarts, windowStart: Date.now() });
+        return { triggered: false, message: "" };
+      }
+      
+      // Check if window expired
+      if (Date.now() - restartData.windowStart > windowMs) {
+        restartWindowCache.set(container.id, { count: currentRestarts, windowStart: Date.now() });
+        return { triggered: false, message: "" };
+      }
+      
+      // Calculate restarts within window
+      const restartsInWindow = currentRestarts - restartData.count;
+      if (restartsInWindow >= threshold) {
+        restartWindowCache.set(container.id, { count: currentRestarts, windowStart: Date.now() });
         return {
           triggered: true,
-          message: `Container ${container.name} has restarted ${container.restartCount} times (threshold: ${threshold})`,
+          message: `Container ${container.name} has restarted ${restartsInWindow} times in the last ${conditionConfig.window || "5m"} (threshold: ${threshold})`,
         };
       }
       break;
     }
-    case "container_stopped": {
-      if (container.state !== "running") {
+    
+    case "container_stopped":
+    case "container_status": {
+      // container_status is a synonym for container_stopped
+      const targetStatus = conditionConfig.status || "exited";
+      const isNotRunning = container.state !== "running";
+      const matchesStatus = targetStatus === "exited" ? isNotRunning : container.state === targetStatus;
+      
+      if (matchesStatus) {
         return {
           triggered: true,
           message: `Container ${container.name} is not running (state: ${container.state})`,
@@ -152,7 +241,78 @@ function evaluateCondition(
       }
       break;
     }
+    
+    case "resource_threshold": {
+      const metric = conditionConfig.metric; // "cpu_percent" or "memory_percent"
+      const threshold = conditionConfig.threshold || 90;
+      
+      let currentValue = 0;
+      if (metric === "cpu_percent") {
+        currentValue = container.cpuPercent || 0;
+      } else if (metric === "memory_percent") {
+        currentValue = container.memoryPercent || 0;
+      }
+      
+      if (currentValue >= threshold) {
+        // Check duration requirement
+        if (requiredDurationMs > 0) {
+          const firstTriggered = durationCache.get(durationKey);
+          if (!firstTriggered) {
+            durationCache.set(durationKey, Date.now());
+            return { triggered: false, message: "" };
+          }
+          if (Date.now() - firstTriggered < requiredDurationMs) {
+            return { triggered: false, message: "" };
+          }
+        }
+        durationCache.delete(durationKey);
+        return {
+          triggered: true,
+          message: `Container ${container.name} ${metric.replace("_", " ")} at ${currentValue.toFixed(1)}% (threshold: ${threshold}%)`,
+        };
+      } else {
+        durationCache.delete(durationKey);
+      }
+      break;
+    }
+    
+    case "log_pattern": {
+      const pattern = conditionConfig.pattern;
+      const excludePattern = conditionConfig.excludePattern;
+      
+      if (!pattern) {
+        return { triggered: false, message: "" };
+      }
+      
+      try {
+        // Get recent logs (last 100 lines, last 5 minutes)
+        const logs = await getContainerLogs(container.id, { tail: 100, since: Math.floor(Date.now() / 1000) - 300 });
+        
+        const regex = new RegExp(pattern, "gm");
+        const excludeRegex = excludePattern ? new RegExp(excludePattern, "gm") : null;
+        
+        const matches = logs.match(regex);
+        if (matches && matches.length > 0) {
+          // Check exclude pattern
+          if (excludeRegex) {
+            const filteredMatches = matches.filter(m => !excludeRegex.test(m));
+            if (filteredMatches.length === 0) {
+              return { triggered: false, message: "" };
+            }
+          }
+          
+          return {
+            triggered: true,
+            message: `Container ${container.name} logs matched pattern "${pattern}" (${matches.length} matches)`,
+          };
+        }
+      } catch (error) {
+        console.error(`[Alerts] Failed to get logs for ${container.name}:`, error);
+      }
+      break;
+    }
   }
+  
   return { triggered: false, message: "" };
 }
 
@@ -179,12 +339,13 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
     routing: a.routing ? JSON.parse(a.routing) : null,
     cooldownMinutes: a.cooldownMinutes ?? 5,
     dedupEnabled: a.dedupEnabled ?? true,
+    dedupWindowMinutes: 5,
     lastTriggeredAt: a.lastTriggeredAt,
     source: "database",
   }));
 
   // Get alerts from config
-  const configAlerts = (config.alerts?.rules || [])
+  const configAlerts: AlertRule[] = (config.alerts?.rules || [])
     .filter((r: any) => r.enabled !== false)
     .map((r: any, i: number) => ({
       id: `config-${r.name || i}`,
@@ -194,8 +355,9 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
       conditionConfig: r.condition || {},
       severity: r.severity || "warning",
       routing: r.routing || null,
-      cooldownMinutes: 5,
-      dedupEnabled: true,
+      cooldownMinutes: parseDuration(config.alerts?.defaults?.cooldown) / 60000 || 5,
+      dedupEnabled: config.alerts?.defaults?.dedupEnabled ?? true,
+      dedupWindowMinutes: parseDuration(r.dedupWindow) / 60000 || 5,
       lastTriggeredAt: null,
       source: "config",
     }));
@@ -209,10 +371,26 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
     }
 
     for (const container of containers) {
-      const { triggered, message } = evaluateCondition(
+      // Check container filter - if condition has a container field, only match those containers
+      const containerFilter = alert.conditionConfig.container;
+      if (containerFilter && !matchesContainerFilter(container.name, containerFilter)) {
+        continue; // Skip containers that don't match the filter
+      }
+
+      // Check per-alert dedup window
+      const dedupKey = `${alert.id}:${container.id}`;
+      if (alert.dedupEnabled && alert.dedupWindowMinutes > 0) {
+        const lastDedup = dedupCache.get(dedupKey);
+        if (lastDedup && Date.now() - lastDedup < alert.dedupWindowMinutes * 60 * 1000) {
+          continue; // Still in dedup window
+        }
+      }
+
+      const { triggered, message } = await evaluateCondition(
         alert.conditionType,
         alert.conditionConfig,
-        container
+        container,
+        alert.id
       );
 
       if (triggered) {
@@ -226,8 +404,9 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
           severity: alert.severity,
         });
 
-        // Update cooldown
+        // Update cooldown and dedup cache
         cooldownCache.set(alert.id, Date.now());
+        dedupCache.set(dedupKey, Date.now());
 
         // Create alert event
         const alertEventId = nanoid();
