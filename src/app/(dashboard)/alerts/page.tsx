@@ -91,6 +91,7 @@ export default function AlertsPage() {
     // Routing
     routeDiscord: true,
     routeAutoTicket: false,
+    routeCreateIncident: true,
   });
 
   useEffect(() => {
@@ -162,6 +163,7 @@ export default function AlertsPage() {
     logExcludePattern: "",
     routeDiscord: true,
     routeAutoTicket: false,
+    routeCreateIncident: true,
   });
 
   const handleSubmit = async () => {
@@ -191,7 +193,7 @@ export default function AlertsPage() {
         conditionConfig,
         severity: formData.severity,
         cooldownMinutes: formData.cooldownMinutes,
-        routing: { discord: formData.routeDiscord, autoTicket: formData.routeAutoTicket },
+        routing: { discord: formData.routeDiscord, autoTicket: formData.routeAutoTicket, createIncident: formData.routeCreateIncident },
       };
 
       const url = editingAlert ? `/api/alerts/${editingAlert.id}` : "/api/alerts";
@@ -240,6 +242,7 @@ export default function AlertsPage() {
       logExcludePattern: config.excludePattern || "",
       routeDiscord: alert.routing?.discord ?? true,
       routeAutoTicket: alert.routing?.autoTicket ?? false,
+      routeCreateIncident: alert.routing?.createIncident ?? true,
     });
     setDialogOpen(true);
   };
@@ -450,9 +453,23 @@ export default function AlertsPage() {
 
               {/* Routing options */}
               <div className="space-y-3 pt-2 border-t">
-                <Label className="text-sm font-medium">Routing</Label>
+                <Label className="text-sm font-medium">When Alert Triggers</Label>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="routeDiscord" className="text-sm font-normal">Send to Discord</Label>
+                  <div>
+                    <Label htmlFor="routeCreateIncident" className="text-sm font-normal">Create incident</Label>
+                    <p className="text-xs text-muted-foreground">Automatically create an incident when this alert fires</p>
+                  </div>
+                  <Switch
+                    id="routeCreateIncident"
+                    checked={formData.routeCreateIncident}
+                    onCheckedChange={(checked) => setFormData({ ...formData, routeCreateIncident: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="routeDiscord" className="text-sm font-normal">Send to Discord</Label>
+                    <p className="text-xs text-muted-foreground">Send notification to Discord webhook</p>
+                  </div>
                   <Switch
                     id="routeDiscord"
                     checked={formData.routeDiscord}
@@ -460,7 +477,10 @@ export default function AlertsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="routeAutoTicket" className="text-sm font-normal">Auto-create ticket</Label>
+                  <div>
+                    <Label htmlFor="routeAutoTicket" className="text-sm font-normal">Auto-create ticket</Label>
+                    <p className="text-xs text-muted-foreground">Create a Linear ticket automatically</p>
+                  </div>
                   <Switch
                     id="routeAutoTicket"
                     checked={formData.routeAutoTicket}
