@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import packageJson from "../../../package.json";
 import {
   LayoutDashboard,
   Layers,
@@ -112,7 +113,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-border/40 px-6 py-4">
         <div className="text-xs text-muted-foreground">
-          Controlyze v0.1.0
+          Controlyze v{packageJson.version}
         </div>
       </SidebarFooter>
     </Sidebar>
