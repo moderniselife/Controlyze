@@ -296,6 +296,9 @@ services:
     image: ghcr.io/josephshenton/controlyze:latest
     container_name: controlyze
     restart: unless-stopped
+    user: "1001:1001"
+    group_add:
+      - "${DOCKER_GID:-998}"
     ports:
       - "3100:3000"
     volumes:
