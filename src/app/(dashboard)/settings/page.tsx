@@ -51,6 +51,8 @@ interface ServiceContainer {
   name: string;
   state: string;
   healthStatus?: string;
+  enabled: boolean;
+  impact: "critical" | "major" | "minor";
 }
 
 interface StatusServiceConfig {
@@ -62,11 +64,19 @@ interface StatusServiceConfig {
   containers: ServiceContainer[];
 }
 
+interface ContainerSettings {
+  [key: string]: {
+    enabled: boolean;
+    impact: "critical" | "major" | "minor";
+  };
+}
+
 interface StatusPageConfig {
   enabled: boolean;
   title: string;
   domain: string;
   services: StatusServiceConfig[];
+  containers: ContainerSettings;
 }
 
 export default function SettingsPage() {
@@ -84,6 +94,7 @@ export default function SettingsPage() {
     title: "System Status",
     domain: "",
     services: [],
+    containers: {},
   });
   const [statusLoading, setStatusLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -279,6 +290,50 @@ export default function SettingsPage() {
         s.name === serviceName ? { ...s, enabled: !s.enabled } : s
       ),
     }));
+  };
+
+  const toggleContainerEnabled = (containerId: string, containerName: string) => {
+    setStatusConfig((prev) => {
+      const key = containerId || containerName;
+      const current = prev.containers[key] || { enabled: true, impact: "major" as const };
+      return {
+        ...prev,
+        containers: {
+          ...prev.containers,
+          [key]: { ...current, enabled: !current.enabled },
+        },
+        services: prev.services.map((s) => ({
+          ...s,
+          containers: s.containers.map((c) =>
+            (c.id === containerId || c.name === containerName)
+              ? { ...c, enabled: !c.enabled }
+              : c
+          ),
+        })),
+      };
+    });
+  };
+
+  const updateContainerImpact = (containerId: string, containerName: string, impact: "critical" | "major" | "minor") => {
+    setStatusConfig((prev) => {
+      const key = containerId || containerName;
+      const current = prev.containers[key] || { enabled: true, impact: "major" as const };
+      return {
+        ...prev,
+        containers: {
+          ...prev.containers,
+          [key]: { ...current, impact },
+        },
+        services: prev.services.map((s) => ({
+          ...s,
+          containers: s.containers.map((c) =>
+            (c.id === containerId || c.name === containerName)
+              ? { ...c, impact }
+              : c
+          ),
+        })),
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -650,26 +705,71 @@ export default function SettingsPage() {
                                 </Select>
                               </div>
                               {service.containers && service.containers.length > 0 && (
-                                <div className="px-3 py-2 bg-muted/20 text-xs">
-                                  <div className="flex items-center gap-1 text-muted-foreground mb-1">
-                                    <Box className="h-3 w-3" />
-                                    <span>Containers:</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    {service.containers.map((container) => (
-                                      <span
-                                        key={container.id}
-                                        className={`px-2 py-0.5 rounded-full text-xs ${
-                                          container.state === "running"
-                                            ? container.healthStatus === "unhealthy"
-                                              ? "bg-amber-500/20 text-amber-400"
-                                              : "bg-emerald-500/20 text-emerald-400"
-                                            : "bg-red-500/20 text-red-400"
-                                        }`}
-                                      >
-                                        {container.name}
-                                      </span>
-                                    ))}
+                                <div className="border-t border-border/50">
+                                  <div className="px-3 py-2 bg-muted/10 text-xs">
+                                    <div className="flex items-center gap-1 text-muted-foreground mb-2">
+                                      <Box className="h-3 w-3" />
+                                      <span>Containers:</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {service.containers.map((container) => (
+                                        <div
+                                          key={container.id}
+                                          className="flex items-center justify-between p-2 rounded-md bg-background/50"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <Switch
+                                              checked={container.enabled}
+                                              onCheckedChange={() => toggleContainerEnabled(container.id, container.name)}
+                                              className="scale-75"
+                                            />
+                                            <span
+                                              className={`${
+                                                container.state === "running"
+                                                  ? container.healthStatus === "unhealthy"
+                                                    ? "text-amber-400"
+                                                    : "text-emerald-400"
+                                                  : "text-red-400"
+                                              }`}
+                                            >
+                                              {container.name}
+                                            </span>
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                                container.state === "running"
+                                                  ? container.healthStatus === "unhealthy"
+                                                    ? "bg-amber-500/20 text-amber-400"
+                                                    : "bg-emerald-500/20 text-emerald-400"
+                                                  : "bg-red-500/20 text-red-400"
+                                              }`}
+                                            >
+                                              {container.state}
+                                            </span>
+                                          </div>
+                                          <Select
+                                            value={container.impact}
+                                            onValueChange={(value: "critical" | "major" | "minor") =>
+                                              updateContainerImpact(container.id, container.name, value)
+                                            }
+                                          >
+                                            <SelectTrigger className="w-[100px] h-7 text-xs">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="critical">
+                                                <span className="text-red-500">Critical</span>
+                                              </SelectItem>
+                                              <SelectItem value="major">
+                                                <span className="text-amber-500">Major</span>
+                                              </SelectItem>
+                                              <SelectItem value="minor">
+                                                <span className="text-blue-500">Minor</span>
+                                              </SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
                                 </div>
                               )}

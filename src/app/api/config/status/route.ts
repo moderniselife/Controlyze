@@ -104,15 +104,29 @@ export async function GET() {
 
     // Merge with saved config
     const savedServices = config.statusPage?.services || [];
+    const savedContainers = config.statusPage?.containers || {};
+    
     const services = Array.from(serviceContainerMap.keys()).map((name) => {
       const saved = savedServices.find((s: any) => s.name === name);
+      const rawContainers = serviceContainerMap.get(name) || [];
+      
+      // Add per-container settings
+      const containersWithSettings = rawContainers.map((c) => {
+        const containerConfig = savedContainers[c.id] || savedContainers[c.name] || {};
+        return {
+          ...c,
+          enabled: containerConfig.enabled ?? true,
+          impact: containerConfig.impact || saved?.impact || DEFAULT_IMPACT[name] || "major",
+        };
+      });
+      
       return {
         name,
         displayName: saved?.displayName || SERVICE_DISPLAY_NAMES[name] || name,
         group: saved?.group || SERVICE_GROUPS[name] || "Other",
         enabled: saved?.enabled ?? true,
         impact: saved?.impact || DEFAULT_IMPACT[name] || "major",
-        containers: serviceContainerMap.get(name) || [],
+        containers: containersWithSettings,
       };
     });
 
@@ -152,6 +166,7 @@ export async function POST(request: NextRequest) {
       title: body.title || "System Status",
       domain: body.domain || "",
       services: body.services || [],
+      containers: body.containers || {},
     };
 
     saveRawConfig(config);

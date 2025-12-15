@@ -178,6 +178,9 @@ export async function GET() {
     // Get list of known services from display names
     const knownServices = Object.keys(SERVICE_DISPLAY_NAMES);
 
+    // Get per-container settings
+    const containerConfigs = config.statusPage?.containers || {};
+
     for (const container of containers) {
       const serviceName = container.serviceName || container.name;
       const lowerName = serviceName.toLowerCase();
@@ -194,6 +197,12 @@ export async function GET() {
           continue; // Skip disabled services
         }
 
+        // Check if this specific container is enabled (default to enabled)
+        const containerConfig = containerConfigs[container.id] || containerConfigs[container.name];
+        if (containerConfig && !containerConfig.enabled) {
+          continue; // Skip disabled containers
+        }
+
         const containerInfo: ContainerInfo = {
           id: container.id,
           name: container.name,
@@ -204,7 +213,7 @@ export async function GET() {
 
         if (serviceMap.has(matchedService)) {
           serviceMap.get(matchedService)!.containers.push(containerInfo);
-          // Update status if this container is worse
+          // Update status if this container is worse (only if container is enabled)
           const currentStatus = serviceMap.get(matchedService)!.status;
           const newStatus = getServiceStatus(container.state, container.healthStatus);
           if (newStatus === "down" || (newStatus === "degraded" && currentStatus === "operational")) {
