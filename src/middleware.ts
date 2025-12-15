@@ -10,7 +10,22 @@ let cachedStatusDomain: string | null = null;
 let cacheTime = 0;
 const CACHE_DURATION = 60000; // 1 minute cache
 
-async function getStatusDomain(request: NextRequest): Promise<string> {
+function isStatusDomain(host: string, configuredDomain: string | null): boolean {
+  // Check against configured domain first
+  if (configuredDomain && host.includes(configuredDomain)) {
+    return true;
+  }
+  
+  // Fallback: check for common status subdomain patterns
+  const hostname = host.split(":")[0]; // Remove port if present
+  if (hostname.startsWith("status.") || hostname.startsWith("status-")) {
+    return true;
+  }
+  
+  return false;
+}
+
+async function getConfiguredStatusDomain(request: NextRequest): Promise<string | null> {
   // Check environment variable first (fast path)
   if (process.env.STATUS_PAGE_DOMAIN) {
     return process.env.STATUS_PAGE_DOMAIN;
@@ -19,10 +34,11 @@ async function getStatusDomain(request: NextRequest): Promise<string> {
   // Return cached value if still valid
   const now = Date.now();
   if (cachedStatusDomain !== null && now - cacheTime < CACHE_DURATION) {
-    return cachedStatusDomain;
+    return cachedStatusDomain || null;
   }
 
-  // Fetch from internal API (runs on server start and caches)
+  // Try to fetch from internal API using main app origin
+  // Note: This may fail on status subdomain, which is why we have fallback patterns
   try {
     const baseUrl = request.nextUrl.origin;
     const response = await fetch(`${baseUrl}/api/internal/status-domain`, {
@@ -33,15 +49,15 @@ async function getStatusDomain(request: NextRequest): Promise<string> {
       const domain = data.domain || "";
       cachedStatusDomain = domain;
       cacheTime = now;
-      return domain;
+      return domain || null;
     }
   } catch {
-    // Silently fail - will use empty string
+    // API call failed - likely on status subdomain, use fallback patterns
   }
 
   cachedStatusDomain = "";
   cacheTime = now;
-  return "";
+  return null;
 }
 
 export async function middleware(request: NextRequest) {
@@ -54,9 +70,9 @@ export async function middleware(request: NextRequest) {
   }
   
   // Check if this is the status page domain
-  const statusDomain = await getStatusDomain(request);
+  const configuredDomain = await getConfiguredStatusDomain(request);
   
-  if (statusDomain && host.includes(statusDomain)) {
+  if (isStatusDomain(host, configuredDomain)) {
     // This is the status page domain - redirect root to /status
     if (pathname === "/" || pathname === "") {
       return NextResponse.redirect(new URL("/status", request.url));
