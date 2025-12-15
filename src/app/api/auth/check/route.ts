@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthEnabled, isAuthenticated } from "@/lib/auth";
+import { isAuthEnabled, validateSession, SESSION_COOKIE } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const authenticated = await isAuthenticated();
+    // Read cookie directly from request (works with middleware fetch)
+    const sessionId = request.cookies.get(SESSION_COOKIE)?.value;
+    
+    if (!sessionId) {
+      return NextResponse.json({
+        authEnabled: true,
+        authenticated: false,
+      });
+    }
+
+    const username = await validateSession(sessionId);
+    const authenticated = username !== null;
 
     return NextResponse.json({
       authEnabled: true,
