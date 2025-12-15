@@ -82,7 +82,7 @@ export default function TicketsPage() {
   const [providerFilter, setProviderFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTicket, setNewTicket] = useState({ title: "", description: "", priority: "medium" });
+  const [newTicket, setNewTicket] = useState({ title: "", description: "", priority: "medium", provider: "linear" });
 
   const fetchTickets = async () => {
     try {
@@ -127,7 +127,7 @@ export default function TicketsPage() {
       if (data.success) {
         setTickets([data.data, ...tickets]);
         setDialogOpen(false);
-        setNewTicket({ title: "", description: "", priority: "medium" });
+        setNewTicket({ title: "", description: "", priority: "medium", provider: "linear" });
       }
     } catch (error) {
       console.error("Failed to create ticket:", error);
@@ -159,6 +159,21 @@ export default function TicketsPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="provider">Create In</Label>
+                  <Select
+                    value={newTicket.provider}
+                    onValueChange={(value) => setNewTicket({ ...newTicket, provider: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="linear">Linear</SelectItem>
+                      <SelectItem value="local">Local (Database)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="title">Title</Label>
                   <Input
