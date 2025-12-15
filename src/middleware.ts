@@ -25,9 +25,12 @@ export async function middleware(request: NextRequest) {
   // Check if auth is enabled by calling our API (can't read config directly in edge middleware)
   try {
     const baseUrl = request.nextUrl.origin;
+    const cookieHeader = request.headers.get("cookie") || "";
+    console.log(`[Middleware] Passing cookies to auth check: ${cookieHeader.substring(0, 50)}...`);
+    
     const authCheckResponse = await fetch(`${baseUrl}/api/auth/check`, {
       headers: {
-        Cookie: request.headers.get("cookie") || "",
+        Cookie: cookieHeader,
       },
     });
 

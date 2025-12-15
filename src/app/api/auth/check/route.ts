@@ -14,8 +14,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Read cookie directly from request (works with middleware fetch)
-    const sessionId = request.cookies.get(SESSION_COOKIE)?.value;
+    // Read cookie from both request.cookies and raw Cookie header
+    let sessionId = request.cookies.get(SESSION_COOKIE)?.value;
+    
+    // Fallback: parse Cookie header directly (for middleware internal fetch)
+    if (!sessionId) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const cookies = Object.fromEntries(
+        cookieHeader.split("; ").map((c) => {
+          const [key, ...val] = c.split("=");
+          return [key, val.join("=")];
+        })
+      );
+      sessionId = cookies[SESSION_COOKIE];
+    }
+    
     console.log(`[Auth Check] Session cookie present: ${!!sessionId}, value: ${sessionId?.substring(0, 8) || 'none'}...`);
     
     if (!sessionId) {
