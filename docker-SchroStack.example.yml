@@ -1,0 +1,308 @@
+# SchroStack - Media Server Stack
+# Example configuration - copy to docker-SchroStack.yml and fill in your values
+# https://github.com/josephshenton/controlyze
+
+networks:
+  cfsolve:
+    name: cfsolve
+    driver: bridge
+
+services:
+  # ==========================================================================
+  # PLEX MEDIA SERVER
+  # ==========================================================================
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    network_mode: host
+    runtime: nvidia  # Remove if no NVIDIA GPU
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Your/Timezone
+      - VERSION=docker
+      - PLEX_CLAIM=  # Get from https://plex.tv/claim
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - /path/to/plex/config:/config
+      - /path/to/media:/media
+      - /path/to/zurg/mount:/zurg
+    restart: unless-stopped
+    depends_on:
+      pd_zurg:
+        condition: service_healthy
+
+  # ==========================================================================
+  # FLARESOLVERR POOL (8 instances + load balancer)
+  # ==========================================================================
+  flaresolverr1:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr1
+    dns: [1.1.1.1, 8.8.8.8]
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=Your/Timezone
+    volumes:
+      - /var/lib/flaresolverr/1:/config
+    restart: unless-stopped
+    networks: [cfsolve]
+
+  flaresolverr2:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr2
+    dns: [1.1.1.1, 8.8.8.8]
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=Your/Timezone
+    volumes:
+      - /var/lib/flaresolverr/2:/config
+    restart: unless-stopped
+    networks: [cfsolve]
+
+  # ... repeat for flaresolverr3-8 ...
+
+  flaresolverr-lb:
+    image: nginx:alpine
+    container_name: flaresolverr-lb
+    dns: [1.1.1.1, 8.8.8.8]
+    depends_on:
+      - flaresolverr1
+      - flaresolverr2
+    ports:
+      - "8192:8191"
+    networks: [cfsolve]
+    restart: unless-stopped
+    volumes:
+      - /path/to/nginx/flaresolverr.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # ==========================================================================
+  # OVERSEERR - Request Management
+  # ==========================================================================
+  overseerr:
+    image: ghcr.io/sct/overseerr:develop
+    container_name: overseerr
+    network_mode: host
+    dns: 1.1.1.1
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=Your/Timezone
+      - PORT=5055
+    ports:
+      - 5055:5055
+    volumes:
+      - /path/to/overseerr/config:/app/config
+    restart: unless-stopped
+    depends_on:
+      - plex
+
+  # ==========================================================================
+  # TUNARR - Live TV
+  # ==========================================================================
+  tunarr:
+    image: chrisbenincasa/tunarr:latest
+    container_name: tunarr
+    restart: unless-stopped
+    network_mode: host
+    runtime: nvidia  # Remove if no NVIDIA GPU
+    dns: 1.1.1.1
+    ports:
+      - 8932:8932
+    depends_on:
+      - plex
+    environment:
+      - LOG_LEVEL=INFO
+      - TZ=Your/Timezone
+      - TUNARR_SERVER_PORT=8932
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - /path/to/tunarr/data:/config/tunarr
+
+  # ==========================================================================
+  # PROWLARR - Indexer Manager
+  # ==========================================================================
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    networks: [cfsolve]
+    dns: [1.1.1.1, 8.8.8.8]
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Your/Timezone
+    volumes:
+      - /path/to/prowlarr/data:/config
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
+
+  # ==========================================================================
+  # TAUTULLI - Plex Analytics
+  # ==========================================================================
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Your/Timezone
+    volumes:
+      - /path/to/tautulli/config:/config
+    ports:
+      - 8181:8181
+    restart: unless-stopped
+    depends_on:
+      - plex
+
+  # ==========================================================================
+  # WATCHTOWER - Auto Updates
+  # ==========================================================================
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    command: --interval 900 --cleanup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ==========================================================================
+  # SCHRODRIVE - Debrid Automation
+  # ==========================================================================
+  schrodrive:
+    image: ghcr.io/moderniselife/schrodrive:latest
+    container_name: schrodrive
+    restart: unless-stopped
+    network_mode: host
+    dns: 1.1.1.1
+    ports:
+      - "8978:8978"
+    environment:
+      - PROWLARR_URL=${PROWLARR_URL:-http://localhost:9696}
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
+      - PROWLARR_TIMEOUT_MS=120000
+      - PROWLARR_SEARCH_LIMIT=100
+      - TORBOX_API_KEY=${TORBOX_API_KEY}
+      - TORBOX_BASE_URL=${TORBOX_BASE_URL:-https://api.torbox.app}
+      - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
+      - OVERSEERR_URL=${OVERSEERR_URL:-http://localhost:5055/api/v1}
+      - POLL_INTERVAL_S=${POLL_INTERVAL_S:-30}
+      - RUN_WEBHOOK=${RUN_WEBHOOK:-false}
+      - RUN_POLLER=${RUN_POLLER:-true}
+      - PORT=8978
+      - AUTO_UPDATE_ENABLED=true
+    depends_on:
+      - prowlarr
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8978/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================================================
+  # CLOUDFLARE TUNNEL
+  # ==========================================================================
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    hostname: cloudflare-tunnel
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    network_mode: "host"
+    command: tunnel run
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - "TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}"
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ==========================================================================
+  # PD_ZURG - Debrid Mount
+  # ==========================================================================
+  pd_zurg:
+    container_name: pd_zurg
+    image: ghcr.io/moderniselife/pd_zurg:latest
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    volumes:
+      - /path/to/zurg/config:/config
+      - /path/to/zurg/log:/log
+      - /path/to/zurg/cache:/cache
+      - /path/to/zurg/RD:/zurg/RD
+      - /path/to/zurg/AD:/zurg/AD
+      - /path/to/zurg/mnt:/data:shared
+    environment:
+      - TZ=Your/Timezone
+      # Zurg Settings
+      - ZURG_ENABLED=true
+      - RD_API_KEY=${RD_API_KEY}
+      - ZURG_LOG_LEVEL=DEBUG
+      - ZURG_UPDATE=true
+      # Plex Integration
+      - PLEX_REFRESH=true
+      - PLEX_MOUNT_DIR=/zurg
+      # Rclone Settings
+      - RCLONE_MOUNT_NAME=pd_zurg
+      - RCLONE_CACHE_DIR=/cache
+      - RCLONE_DIR_CACHE_TIME=10s
+      - RCLONE_VFS_CACHE_MODE=full
+      - RCLONE_VFS_CACHE_MAX_SIZE=100G
+      - RCLONE_VFS_CACHE_MAX_AGE=24h
+      - RCLONE_TRANSFERS=8
+      # Plex Debrid
+      - PD_ENABLED=true
+      - PLEX_USER=${PLEX_USER}
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - PLEX_ADDRESS=${PLEX_ADDRESS:-http://localhost:32400}
+      - PD_UPDATE=true
+      - SHOW_MENU=false
+      - SEERR_API_KEY=${SEERR_API_KEY}
+      - SEERR_ADDRESS=${SEERR_ADDRESS:-http://localhost:5055}
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+      - no-new-privileges
+    healthcheck:
+      test: ["CMD-SHELL", "grep -qs ' /data/pd_zurg ' /proc/mounts"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  # ==========================================================================
+  # CONTROLYZE - Docker Monitoring Dashboard
+  # ==========================================================================
+  controlyze:
+    image: ghcr.io/josephshenton/controlyze:latest
+    container_name: controlyze
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /path/to/controlyze/data:/app/data
+    environment:
+      - TZ=Your/Timezone
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - LINEAR_API_KEY=${LINEAR_API_KEY}
+      - LINEAR_TEAM_ID=${LINEAR_TEAM_ID}
