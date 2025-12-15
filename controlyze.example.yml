@@ -1,0 +1,165 @@
+# Controlyze Configuration Example
+# Copy this file to ./data/controlyze.yml and customize for your setup
+
+version: "1"
+
+# Docker connection settings
+docker:
+  connection:
+    type: socket  # socket | tcp | ssh
+    socketPath: /var/run/docker.sock
+    # For TCP connections:
+    # type: tcp
+    # host: 192.168.1.100
+    # port: 2375
+    # tls:
+    #   enabled: true
+    #   ca: /path/to/ca.pem
+    #   cert: /path/to/cert.pem
+    #   key: /path/to/key.pem
+
+# Stack detection and profiles
+stacks:
+  detection:
+    enabled: true
+    paths:
+      - /home/*/docker-*.yml
+      - /opt/stacks/**/docker-compose.yml
+  
+  profiles:
+    # SchroStack profile - auto-detected for media server stacks
+    schrostack:
+      enabled: true
+      composeFile: docker-SchroStack.yml
+      services:
+        media:
+          - plex
+          - tunarr
+          - overseerr
+          - tautulli
+        indexers:
+          - prowlarr
+          - flaresolverr*
+        automation:
+          - schrodrive
+          - watchtower
+          - pd_zurg
+        infrastructure:
+          - cloudflare-tunnel
+          - flaresolverr-lb
+
+# Alert rules
+alerts:
+  rules:
+    - name: container_unhealthy
+      enabled: true
+      condition:
+        type: health_status
+        status: unhealthy
+        duration: 30s
+      severity: warning
+      routing:
+        discord: true
+        
+    - name: restart_loop
+      enabled: true
+      condition:
+        type: restart_count
+        threshold: 3
+        window: 5m
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+        
+    - name: high_memory
+      enabled: true
+      condition:
+        type: resource_threshold
+        metric: memory_percent
+        threshold: 90
+        duration: 2m
+      severity: warning
+      
+    - name: log_error
+      enabled: false
+      condition:
+        type: log_pattern
+        pattern: "(?i)(error|exception|fatal)"
+        excludePattern: "(?i)(expected|handled)"
+      severity: info
+      dedupWindow: 5m
+
+  defaults:
+    cooldown: 5m
+    dedupEnabled: true
+
+# Discord integration
+discord:
+  enabled: false
+  webhookUrl: ${DISCORD_WEBHOOK_URL}
+  # Optional: Use bot token for thread support
+  # botToken: ${DISCORD_BOT_TOKEN}
+  
+  routing:
+    defaultChannel: alerts
+    severityChannels:
+      critical: critical-alerts
+      warning: alerts
+      info: logs
+      
+  format:
+    includeLogs: true
+    logLines: 10
+    includeMetrics: true
+
+# Ticketing integration
+ticketing:
+  provider: linear  # linear | github | webhook
+  
+  linear:
+    apiKey: ${LINEAR_API_KEY}
+    teamId: ${LINEAR_TEAM_ID}
+    
+  # github:
+  #   token: ${GITHUB_TOKEN}
+  #   owner: your-org
+  #   repo: incidents
+    
+  # webhook:
+  #   url: https://your-webhook-endpoint.com/tickets
+  #   headers:
+  #     Authorization: Bearer ${WEBHOOK_TOKEN}
+    
+  mapping:
+    severityToPriority:
+      critical: urgent
+      warning: high
+      info: medium
+    stackToProject:
+      schrostack: "Media Infrastructure"
+
+# Log settings
+logs:
+  retentionDays: 7
+  indexEnabled: true
+  redaction:
+    enabled: true
+    patterns:
+      - "(?i)(api[_-]?key|token|secret|password)\\s*[=:]\\s*\\S+"
+      - "Bearer\\s+[A-Za-z0-9\\-_.]+"
+
+# UI settings
+ui:
+  theme: dark  # dark | light | system
+  defaultView: overview
+  refreshInterval: 5s
+
+# Authentication (optional)
+auth:
+  enabled: false
+  # provider: local  # local | oauth | proxy
+  # local:
+  #   users:
+  #     - username: admin
+  #       passwordHash: ${ADMIN_PASSWORD_HASH}

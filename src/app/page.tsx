@@ -1,65 +1,302 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect } from "react";
+import Link from "next/link";
+import {
+  Container,
+  Layers,
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Clock,
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/dashboard/status-badge";
+import { useContainersStore } from "@/stores/containers";
+
+export default function OverviewPage() {
+  const { containers, stacks, isLoading, error, fetchContainers, fetchStacks } =
+    useContainersStore();
+
+  useEffect(() => {
+    fetchContainers();
+    fetchStacks();
+
+    const interval = setInterval(() => {
+      fetchContainers();
+      fetchStacks();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [fetchContainers, fetchStacks]);
+
+  const runningContainers = containers.filter((c) => c.state === "running");
+  const stoppedContainers = containers.filter((c) => c.state === "exited");
+  const unhealthyContainers = containers.filter(
+    (c) => c.healthStatus === "unhealthy"
+  );
+  const restartingContainers = containers.filter(
+    (c) => c.state === "restarting"
+  );
+
+  const stats = [
+    {
+      title: "Running",
+      value: runningContainers.length,
+      total: containers.length,
+      icon: CheckCircle2,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+    },
+    {
+      title: "Stopped",
+      value: stoppedContainers.length,
+      total: containers.length,
+      icon: XCircle,
+      color: "text-gray-400",
+      bgColor: "bg-gray-500/10",
+    },
+    {
+      title: "Unhealthy",
+      value: unhealthyContainers.length,
+      total: containers.length,
+      icon: AlertTriangle,
+      color: "text-red-500",
+      bgColor: "bg-red-500/10",
+    },
+    {
+      title: "Restarting",
+      value: restartingContainers.length,
+      total: containers.length,
+      icon: RefreshCw,
+      color: "text-orange-500",
+      bgColor: "bg-orange-500/10",
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.title} className="bg-card/50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {stat.title}
+              </CardTitle>
+              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-bold">{stat.value}</span>
+                <span className="text-sm text-muted-foreground">
+                  / {stat.total}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5" />
+                Stacks
+              </CardTitle>
+              <CardDescription>Docker Compose projects</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/stacks">
+                View all
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {isLoading && stacks.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                Loading stacks...
+              </div>
+            ) : stacks.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                No stacks detected
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stacks.slice(0, 5).map((stack) => (
+                  <Link
+                    key={stack.name}
+                    href={`/stacks/${stack.name}`}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-background/50 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                        <Layers className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{stack.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {stack.serviceCount} services
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {stack.unhealthyCount > 0 && (
+                        <span className="text-xs text-red-500">
+                          {stack.unhealthyCount} unhealthy
+                        </span>
+                      )}
+                      <span className="text-sm text-green-500">
+                        {stack.runningCount}/{stack.serviceCount} running
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Container className="h-5 w-5" />
+                Recent Containers
+              </CardTitle>
+              <CardDescription>Latest container activity</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/containers">
+                View all
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {isLoading && containers.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                Loading containers...
+              </div>
+            ) : containers.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                No containers found
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {containers.slice(0, 5).map((container) => (
+                  <Link
+                    key={container.id}
+                    href={`/containers/${container.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-background/50 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                        <Container className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{container.name}</p>
+                        <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                          {container.image}
+                        </p>
+                      </div>
+                    </div>
+                    <StatusBadge
+                      status={container.state}
+                      healthStatus={container.healthStatus}
+                    />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="bg-card/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Active Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {unhealthyContainers.length > 0 ? (
+                unhealthyContainers.map((container) => (
+                  <div
+                    key={container.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-red-500/20 bg-red-500/5"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{container.name}</p>
+                      <p className="text-xs text-muted-foreground">Unhealthy</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center py-4 text-muted-foreground text-sm">
+                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                  All systems healthy
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-500" />
+              Recent Events
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+              <Clock className="h-4 w-4 mr-2" />
+              Events will appear here
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-green-500" />
+              Quick Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/logs">
+                View Logs
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/alerts">
+                Configure Alerts
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/settings">
+                Settings
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
