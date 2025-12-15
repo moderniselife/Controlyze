@@ -83,20 +83,28 @@ export async function GET() {
     
     // Get current containers to auto-detect services
     const containers = await listContainers(true);
-    const detectedServices = new Set<string>();
+    const serviceContainerMap = new Map<string, { id: string; name: string; state: string; healthStatus?: string }[]>();
     
     for (const container of containers) {
       const serviceName = (container.serviceName || container.name).toLowerCase();
       for (const knownService of Object.keys(SERVICE_DISPLAY_NAMES)) {
         if (serviceName.includes(knownService)) {
-          detectedServices.add(knownService);
+          if (!serviceContainerMap.has(knownService)) {
+            serviceContainerMap.set(knownService, []);
+          }
+          serviceContainerMap.get(knownService)!.push({
+            id: container.id,
+            name: container.name,
+            state: container.state,
+            healthStatus: container.healthStatus,
+          });
         }
       }
     }
 
     // Merge with saved config
     const savedServices = config.statusPage?.services || [];
-    const services = Array.from(detectedServices).map((name) => {
+    const services = Array.from(serviceContainerMap.keys()).map((name) => {
       const saved = savedServices.find((s: any) => s.name === name);
       return {
         name,
@@ -104,6 +112,7 @@ export async function GET() {
         group: saved?.group || SERVICE_GROUPS[name] || "Other",
         enabled: saved?.enabled ?? true,
         impact: saved?.impact || DEFAULT_IMPACT[name] || "major",
+        containers: serviceContainerMap.get(name) || [],
       };
     });
 

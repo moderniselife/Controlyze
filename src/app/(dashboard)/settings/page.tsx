@@ -15,6 +15,9 @@ import {
   EyeOff,
   Globe,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Box,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,12 +46,20 @@ interface AuthConfig {
   users: AuthUser[];
 }
 
+interface ServiceContainer {
+  id: string;
+  name: string;
+  state: string;
+  healthStatus?: string;
+}
+
 interface StatusServiceConfig {
   name: string;
   displayName: string;
   group: string;
   enabled: boolean;
   impact: "critical" | "major" | "minor";
+  containers: ServiceContainer[];
 }
 
 interface StatusPageConfig {
@@ -73,6 +84,30 @@ export default function SettingsPage() {
     services: [],
   });
   const [statusLoading, setStatusLoading] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
+
+  // Group services by their group
+  const groupedServices = statusConfig.services.reduce((acc, service) => {
+    if (!acc[service.group]) {
+      acc[service.group] = [];
+    }
+    acc[service.group].push(service);
+    return acc;
+  }, {} as Record<string, StatusServiceConfig[]>);
+
+  const groupOrder = ["Media", "Indexing", "Automation", "Infrastructure", "Storage", "Other"];
 
   useEffect(() => {
     fetchAuthConfig();
@@ -515,43 +550,87 @@ export default function SettingsPage() {
                   No services configured. Services will be auto-detected from your containers.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {statusConfig.services.map((service) => (
-                    <div
-                      key={service.name}
-                      className="flex items-center justify-between p-3 rounded-lg bg-background/50 border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={service.enabled}
-                          onCheckedChange={() => toggleServiceEnabled(service.name)}
-                        />
-                        <div>
-                          <span className="font-medium">{service.displayName}</span>
-                          <span className="text-xs text-muted-foreground ml-2">({service.group})</span>
-                        </div>
-                      </div>
-                      <Select
-                        value={service.impact}
-                        onValueChange={(value: "critical" | "major" | "minor") =>
-                          updateServiceImpact(service.name, value)
-                        }
+                <div className="space-y-4">
+                  {groupOrder.filter(g => groupedServices[g]).map((group) => (
+                    <div key={group} className="border rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => toggleGroup(group)}
+                        className="w-full flex items-center justify-between p-3 bg-background/50 hover:bg-background/70 transition-colors"
                       >
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="critical">
-                            <span className="text-red-500">Critical</span>
-                          </SelectItem>
-                          <SelectItem value="major">
-                            <span className="text-amber-500">Major</span>
-                          </SelectItem>
-                          <SelectItem value="minor">
-                            <span className="text-blue-500">Minor</span>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{group}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({groupedServices[group].length} service{groupedServices[group].length !== 1 ? "s" : ""})
+                          </span>
+                        </div>
+                        {expandedGroups.has(group) ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      {expandedGroups.has(group) && (
+                        <div className="border-t">
+                          {groupedServices[group].map((service) => (
+                            <div key={service.name} className="border-b last:border-b-0">
+                              <div className="flex items-center justify-between p-3 bg-card/30">
+                                <div className="flex items-center gap-3">
+                                  <Switch
+                                    checked={service.enabled}
+                                    onCheckedChange={() => toggleServiceEnabled(service.name)}
+                                  />
+                                  <span className="font-medium">{service.displayName}</span>
+                                </div>
+                                <Select
+                                  value={service.impact}
+                                  onValueChange={(value: "critical" | "major" | "minor") =>
+                                    updateServiceImpact(service.name, value)
+                                  }
+                                >
+                                  <SelectTrigger className="w-[120px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="critical">
+                                      <span className="text-red-500">Critical</span>
+                                    </SelectItem>
+                                    <SelectItem value="major">
+                                      <span className="text-amber-500">Major</span>
+                                    </SelectItem>
+                                    <SelectItem value="minor">
+                                      <span className="text-blue-500">Minor</span>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {service.containers && service.containers.length > 0 && (
+                                <div className="px-3 py-2 bg-muted/20 text-xs">
+                                  <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                                    <Box className="h-3 w-3" />
+                                    <span>Containers:</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {service.containers.map((container) => (
+                                      <span
+                                        key={container.id}
+                                        className={`px-2 py-0.5 rounded-full text-xs ${
+                                          container.state === "running"
+                                            ? container.healthStatus === "unhealthy"
+                                              ? "bg-amber-500/20 text-amber-400"
+                                              : "bg-emerald-500/20 text-emerald-400"
+                                            : "bg-red-500/20 text-red-400"
+                                        }`}
+                                      >
+                                        {container.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
