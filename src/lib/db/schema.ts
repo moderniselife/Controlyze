@@ -77,14 +77,26 @@ export const incidents = sqliteTable("incidents", {
   status: text("status").notNull().default("open"),
   affectedContainers: text("affected_containers"),
   affectedStacks: text("affected_stacks"),
+  affectedServices: text("affected_services"), // For status page display
   notes: text("notes"),
   runbook: text("runbook"),
   logExcerpts: text("log_excerpts"),
   discordThreadId: text("discord_thread_id"),
+  isPublic: integer("is_public", { mode: "boolean" }).default(true), // Show on status page
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   mitigatedAt: integer("mitigated_at", { mode: "timestamp" }),
   resolvedAt: integer("resolved_at", { mode: "timestamp" }),
+});
+
+export const incidentUpdates = sqliteTable("incident_updates", {
+  id: text("id").primaryKey(),
+  incidentId: text("incident_id").notNull().references(() => incidents.id),
+  status: text("status").notNull(), // investigating, identified, monitoring, resolved
+  message: text("message").notNull(),
+  isPublic: integer("is_public", { mode: "boolean" }).default(true),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
 export const tickets = sqliteTable("tickets", {
@@ -176,6 +188,8 @@ export type AlertEvent = typeof alertEvents.$inferSelect;
 export type NewAlertEvent = typeof alertEvents.$inferInsert;
 export type Incident = typeof incidents.$inferSelect;
 export type NewIncident = typeof incidents.$inferInsert;
+export type IncidentUpdate = typeof incidentUpdates.$inferSelect;
+export type NewIncidentUpdate = typeof incidentUpdates.$inferInsert;
 export type Ticket = typeof tickets.$inferSelect;
 export type NewTicket = typeof tickets.$inferInsert;
 export type DockerEvent = typeof dockerEvents.$inferSelect;

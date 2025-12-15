@@ -3,8 +3,8 @@ import { listContainers } from "@/lib/docker/containers";
 import { getOverallUptime } from "@/lib/uptime/tracker";
 import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
-import { incidents, uptimeRecords } from "@/lib/db/schema";
-import { desc, gte, asc } from "drizzle-orm";
+import { incidents, uptimeRecords, incidentUpdates } from "@/lib/db/schema";
+import { desc, gte, asc, eq, and } from "drizzle-orm";
 import { recordUptime, determineServiceStatus } from "@/lib/uptime/recorder";
 
 export interface ContainerInfo {
@@ -37,11 +37,21 @@ export interface PublicStatusResponse {
   };
 }
 
+export interface PublicIncidentUpdate {
+  id: string;
+  status: string;
+  message: string;
+  createdAt: string;
+}
+
 export interface PublicIncident {
   id: string;
   title: string;
-  status: "open" | "investigating" | "mitigated" | "resolved";
+  description?: string;
+  status: "open" | "investigating" | "identified" | "monitoring" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
+  affectedServices?: string[];
+  updates: PublicIncidentUpdate[];
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
@@ -265,24 +275,62 @@ export async function GET() {
       getOverallUptime(24 * 30),
     ]);
 
-    // Fetch recent incidents from database
+    // Fetch recent incidents from database (only public ones)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const recentIncidents = await db
       .select()
       .from(incidents)
-      .where(gte(incidents.createdAt, sevenDaysAgo))
+      .where(
+        and(
+          gte(incidents.createdAt, sevenDaysAgo),
+          eq(incidents.isPublic, true)
+        )
+      )
       .orderBy(desc(incidents.createdAt))
       .limit(10);
 
-    const publicIncidents: PublicIncident[] = recentIncidents.map((inc) => ({
-      id: inc.id,
-      title: inc.title,
-      status: inc.status === "resolved" ? "resolved" : inc.status === "mitigated" ? "mitigated" : inc.status === "investigating" ? "investigating" : "open",
-      severity: inc.severity === "critical" ? "critical" : inc.severity === "high" ? "major" : "minor",
-      createdAt: inc.createdAt.toISOString(),
-      updatedAt: inc.updatedAt.toISOString(),
-      resolvedAt: inc.resolvedAt?.toISOString(),
-    }));
+    // Fetch updates for each incident
+    const publicIncidents: PublicIncident[] = await Promise.all(
+      recentIncidents.map(async (inc) => {
+        const updates = await db
+          .select()
+          .from(incidentUpdates)
+          .where(
+            and(
+              eq(incidentUpdates.incidentId, inc.id),
+              eq(incidentUpdates.isPublic, true)
+            )
+          )
+          .orderBy(desc(incidentUpdates.createdAt));
+
+        const mapStatus = (s: string): PublicIncident["status"] => {
+          if (s === "resolved") return "resolved";
+          if (s === "mitigated") return "mitigated";
+          if (s === "monitoring") return "monitoring";
+          if (s === "identified") return "identified";
+          if (s === "investigating") return "investigating";
+          return "open";
+        };
+
+        return {
+          id: inc.id,
+          title: inc.title,
+          description: inc.description || undefined,
+          status: mapStatus(inc.status),
+          severity: inc.severity === "critical" ? "critical" as const : inc.severity === "high" ? "major" as const : "minor" as const,
+          affectedServices: inc.affectedServices ? JSON.parse(inc.affectedServices) : undefined,
+          updates: updates.map((u) => ({
+            id: u.id,
+            status: u.status,
+            message: u.message,
+            createdAt: u.createdAt.toISOString(),
+          })),
+          createdAt: inc.createdAt.toISOString(),
+          updatedAt: inc.updatedAt.toISOString(),
+          resolvedAt: inc.resolvedAt?.toISOString(),
+        };
+      })
+    );
 
     // Get earliest uptime record to show "tracking since"
     const earliestRecord = await db

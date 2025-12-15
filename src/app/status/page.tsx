@@ -22,11 +22,21 @@ interface PublicServiceStatus {
   containers: ContainerInfo[];
 }
 
+interface PublicIncidentUpdate {
+  id: string;
+  status: string;
+  message: string;
+  createdAt: string;
+}
+
 interface PublicIncident {
   id: string;
   title: string;
-  status: "open" | "investigating" | "mitigated" | "resolved";
+  description?: string;
+  status: "open" | "investigating" | "identified" | "monitoring" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
+  affectedServices?: string[];
+  updates: PublicIncidentUpdate[];
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
@@ -398,35 +408,115 @@ export default function PublicStatusPage() {
             {status.incidents.length > 0 && (
               <div className="mt-12">
                 <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-4">
-                  Recent Incidents
+                  {status.incidents.some(i => i.status !== "resolved") ? "Active Incidents" : "Recent Incidents"}
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {status.incidents.map((incident) => (
                     <div
                       key={incident.id}
-                      className="rounded-xl bg-white/5 border border-white/10 p-4"
+                      className={`rounded-xl border p-5 ${
+                        incident.status === "resolved"
+                          ? "bg-emerald-500/5 border-emerald-500/20"
+                          : incident.severity === "critical"
+                          ? "bg-red-500/5 border-red-500/20"
+                          : incident.severity === "major"
+                          ? "bg-amber-500/5 border-amber-500/20"
+                          : "bg-blue-500/5 border-blue-500/20"
+                      }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-medium text-white">
-                            {incident.title}
-                          </h4>
-                          <p className="text-sm text-zinc-500 mt-1">
-                            {new Date(incident.createdAt).toLocaleDateString()}
-                          </p>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-white">
+                              {incident.title}
+                            </h4>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${
+                                incident.status === "resolved"
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : incident.status === "monitoring" || incident.status === "mitigated"
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : incident.status === "identified"
+                                  ? "bg-yellow-500/20 text-yellow-400"
+                                  : "bg-amber-500/20 text-amber-400"
+                              }`}
+                            >
+                              {incident.status}
+                            </span>
+                          </div>
+                          {incident.description && (
+                            <p className="text-sm text-zinc-400 mt-1">
+                              {incident.description}
+                            </p>
+                          )}
+                          {incident.affectedServices && incident.affectedServices.length > 0 && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="text-xs text-zinc-500">Affected:</span>
+                              <div className="flex gap-1">
+                                {incident.affectedServices.map((svc) => (
+                                  <span key={svc} className="text-xs px-2 py-0.5 rounded bg-white/10 text-zinc-300">
+                                    {svc}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full capitalize ${
-                            incident.status === "resolved"
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : incident.status === "mitigated"
-                              ? "bg-blue-500/10 text-blue-400"
-                              : "bg-amber-500/10 text-amber-400"
-                          }`}
-                        >
-                          {incident.status}
+                        <span className="text-xs text-zinc-500">
+                          {new Date(incident.createdAt).toLocaleDateString()}
                         </span>
                       </div>
+
+                      {/* Timeline of updates */}
+                      {incident.updates && incident.updates.length > 0 && (
+                        <div className="mt-4 border-t border-white/10 pt-4">
+                          <div className="space-y-3">
+                            {incident.updates.slice(0, 5).map((update, idx) => (
+                              <div key={update.id} className="flex gap-3">
+                                <div className="flex flex-col items-center">
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    update.status === "resolved"
+                                      ? "bg-emerald-400"
+                                      : update.status === "monitoring" || update.status === "mitigated"
+                                      ? "bg-blue-400"
+                                      : update.status === "identified"
+                                      ? "bg-yellow-400"
+                                      : "bg-amber-400"
+                                  }`} />
+                                  {idx < incident.updates.slice(0, 5).length - 1 && (
+                                    <div className="w-px h-full bg-white/10 mt-1" />
+                                  )}
+                                </div>
+                                <div className="flex-1 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium text-zinc-300 capitalize">
+                                      {update.status}
+                                    </span>
+                                    <span className="text-xs text-zinc-600">
+                                      {new Date(update.createdAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-zinc-400 mt-0.5">
+                                    {update.message}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Recovery notice for resolved incidents */}
+                      {incident.status === "resolved" && incident.resolvedAt && (
+                        <div className="mt-4 pt-3 border-t border-emerald-500/20">
+                          <div className="flex items-center gap-2 text-emerald-400">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              Resolved on {new Date(incident.resolvedAt).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

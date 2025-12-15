@@ -78,15 +78,29 @@ sqlite.exec(`
     status TEXT NOT NULL DEFAULT 'open',
     affected_containers TEXT,
     affected_stacks TEXT,
+    affected_services TEXT,
     notes TEXT,
     runbook TEXT,
     log_excerpts TEXT,
     discord_thread_id TEXT,
+    is_public INTEGER DEFAULT 1,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     mitigated_at INTEGER,
     resolved_at INTEGER
   );
+
+  CREATE TABLE IF NOT EXISTS incident_updates (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_public INTEGER DEFAULT 1,
+    created_by TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_incident_updates_incident ON incident_updates(incident_id);
 
   CREATE TABLE IF NOT EXISTS tickets (
     id TEXT PRIMARY KEY,
