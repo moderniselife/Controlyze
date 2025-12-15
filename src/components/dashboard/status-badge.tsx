@@ -84,7 +84,7 @@ interface SeverityBadgeProps {
 }
 
 export function SeverityBadge({ severity, className }: SeverityBadgeProps) {
-  const config = {
+  const configs = {
     info: {
       label: "Info",
       className: "bg-blue-500/10 text-blue-500 border-blue-500/20",
@@ -97,7 +97,12 @@ export function SeverityBadge({ severity, className }: SeverityBadgeProps) {
       label: "Critical",
       className: "bg-red-500/10 text-red-500 border-red-500/20",
     },
-  }[severity];
+  };
+  
+  const config = configs[severity] || {
+    label: severity || "Unknown",
+    className: "bg-gray-500/10 text-gray-400 border-gray-500/20",
+  };
 
   return (
     <Badge
@@ -115,7 +120,7 @@ interface IncidentStatusBadgeProps {
 }
 
 export function IncidentStatusBadge({ status, className }: IncidentStatusBadgeProps) {
-  const config = {
+  const configs = {
     open: {
       label: "Open",
       className: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -132,7 +137,12 @@ export function IncidentStatusBadge({ status, className }: IncidentStatusBadgePr
       label: "Resolved",
       className: "bg-green-500/10 text-green-500 border-green-500/20",
     },
-  }[status];
+  };
+  
+  const config = configs[status] || {
+    label: status || "Unknown",
+    className: "bg-gray-500/10 text-gray-400 border-gray-500/20",
+  };
 
   return (
     <Badge
