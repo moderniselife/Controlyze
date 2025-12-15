@@ -145,6 +145,7 @@ export async function GET() {
         title: config.statusPage?.title || "System Status",
         domain: config.statusPage?.domain || "",
         services,
+        containers: savedContainers,
       },
     });
   } catch (error) {

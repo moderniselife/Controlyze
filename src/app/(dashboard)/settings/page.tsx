@@ -214,7 +214,14 @@ export default function SettingsPage() {
       const response = await fetch("/api/config/status");
       const data = await response.json();
       if (data.success) {
-        setStatusConfig(data.data);
+        // Ensure containers object exists and merge with defaults
+        setStatusConfig({
+          enabled: data.data.enabled ?? true,
+          title: data.data.title || "System Status",
+          domain: data.data.domain || "",
+          services: data.data.services || [],
+          containers: data.data.containers || {},
+        });
       }
     } catch (error) {
       console.error("Failed to fetch status config:", error);
