@@ -79,6 +79,18 @@ export default function AlertsPage() {
     conditionType: "health_status",
     severity: "warning",
     cooldownMinutes: 5,
+    // Condition-specific fields
+    healthStatus: "unhealthy",
+    duration: "30s",
+    restartThreshold: 3,
+    restartWindow: "5m",
+    resourceMetric: "memory_percent",
+    resourceThreshold: 90,
+    logPattern: "",
+    logExcludePattern: "",
+    // Routing
+    routeDiscord: true,
+    routeAutoTicket: false,
   });
 
   useEffect(() => {
@@ -134,17 +146,52 @@ export default function AlertsPage() {
     }
   };
 
+  const getDefaultFormData = () => ({
+    name: "",
+    description: "",
+    conditionType: "health_status",
+    severity: "warning",
+    cooldownMinutes: 5,
+    healthStatus: "unhealthy",
+    duration: "30s",
+    restartThreshold: 3,
+    restartWindow: "5m",
+    resourceMetric: "memory_percent",
+    resourceThreshold: 90,
+    logPattern: "",
+    logExcludePattern: "",
+    routeDiscord: true,
+    routeAutoTicket: false,
+  });
+
   const handleSubmit = async () => {
     setIsSaving(true);
     try {
+      let conditionConfig: Record<string, any> = {};
+      
+      switch (formData.conditionType) {
+        case "health_status":
+          conditionConfig = { status: formData.healthStatus, duration: formData.duration };
+          break;
+        case "restart_count":
+          conditionConfig = { threshold: formData.restartThreshold, window: formData.restartWindow };
+          break;
+        case "resource_threshold":
+          conditionConfig = { metric: formData.resourceMetric, threshold: formData.resourceThreshold, duration: formData.duration };
+          break;
+        case "log_pattern":
+          conditionConfig = { pattern: formData.logPattern, excludePattern: formData.logExcludePattern || undefined };
+          break;
+      }
+
       const payload = {
         name: formData.name,
         description: formData.description || null,
         conditionType: formData.conditionType,
-        conditionConfig: {},
+        conditionConfig,
         severity: formData.severity,
         cooldownMinutes: formData.cooldownMinutes,
-        routing: { discord: true },
+        routing: { discord: formData.routeDiscord, autoTicket: formData.routeAutoTicket },
       };
 
       const url = editingAlert ? `/api/alerts/${editingAlert.id}` : "/api/alerts";
@@ -161,7 +208,7 @@ export default function AlertsPage() {
         toast.success(editingAlert ? "Alert updated" : "Alert created");
         setDialogOpen(false);
         setEditingAlert(null);
-        setFormData({ name: "", description: "", conditionType: "health_status", severity: "warning", cooldownMinutes: 5 });
+        setFormData(getDefaultFormData());
         fetchAlerts();
       } else {
         toast.error(data.error || "Failed to save alert");
@@ -175,19 +222,31 @@ export default function AlertsPage() {
 
   const openEditDialog = (alert: AlertRule) => {
     setEditingAlert(alert);
+    const config = alert.conditionConfig || {};
     setFormData({
+      ...getDefaultFormData(),
       name: alert.name,
       description: alert.description || "",
       conditionType: alert.conditionType,
       severity: alert.severity,
       cooldownMinutes: alert.cooldownMinutes,
+      healthStatus: config.status || "unhealthy",
+      duration: config.duration || "30s",
+      restartThreshold: config.threshold || 3,
+      restartWindow: config.window || "5m",
+      resourceMetric: config.metric || "memory_percent",
+      resourceThreshold: config.threshold || 90,
+      logPattern: config.pattern || "",
+      logExcludePattern: config.excludePattern || "",
+      routeDiscord: alert.routing?.discord ?? true,
+      routeAutoTicket: alert.routing?.autoTicket ?? false,
     });
     setDialogOpen(true);
   };
 
   const openNewDialog = () => {
     setEditingAlert(null);
-    setFormData({ name: "", description: "", conditionType: "health_status", severity: "warning", cooldownMinutes: 5 });
+    setFormData(getDefaultFormData());
     setDialogOpen(true);
   };
 
@@ -268,14 +327,146 @@ export default function AlertsPage() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="cooldown">Cooldown (minutes)</Label>
-                <Input
-                  id="cooldown"
-                  type="number"
-                  value={formData.cooldownMinutes}
-                  onChange={(e) => setFormData({ ...formData, cooldownMinutes: parseInt(e.target.value) || 5 })}
-                />
+
+              {/* Condition-specific fields */}
+              {formData.conditionType === "health_status" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Health Status</Label>
+                    <Select
+                      value={formData.healthStatus}
+                      onValueChange={(value) => setFormData({ ...formData, healthStatus: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unhealthy">Unhealthy</SelectItem>
+                        <SelectItem value="healthy">Healthy</SelectItem>
+                        <SelectItem value="starting">Starting</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Duration</Label>
+                    <Input
+                      value={formData.duration}
+                      onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                      placeholder="e.g., 30s, 1m, 5m"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.conditionType === "restart_count" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Threshold (restarts)</Label>
+                    <Input
+                      type="number"
+                      value={formData.restartThreshold}
+                      onChange={(e) => setFormData({ ...formData, restartThreshold: parseInt(e.target.value) || 3 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Window</Label>
+                    <Input
+                      value={formData.restartWindow}
+                      onChange={(e) => setFormData({ ...formData, restartWindow: e.target.value })}
+                      placeholder="e.g., 5m, 10m, 1h"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.conditionType === "resource_threshold" && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Metric</Label>
+                    <Select
+                      value={formData.resourceMetric}
+                      onValueChange={(value) => setFormData({ ...formData, resourceMetric: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="memory_percent">Memory %</SelectItem>
+                        <SelectItem value="cpu_percent">CPU %</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Threshold (%)</Label>
+                    <Input
+                      type="number"
+                      value={formData.resourceThreshold}
+                      onChange={(e) => setFormData({ ...formData, resourceThreshold: parseInt(e.target.value) || 90 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Duration</Label>
+                    <Input
+                      value={formData.duration}
+                      onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                      placeholder="e.g., 2m"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.conditionType === "log_pattern" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Pattern (regex)</Label>
+                    <Input
+                      value={formData.logPattern}
+                      onChange={(e) => setFormData({ ...formData, logPattern: e.target.value })}
+                      placeholder="e.g., error|exception|failed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Exclude Pattern (optional)</Label>
+                    <Input
+                      value={formData.logExcludePattern}
+                      onChange={(e) => setFormData({ ...formData, logExcludePattern: e.target.value })}
+                      placeholder="e.g., healthcheck"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cooldown">Cooldown (minutes)</Label>
+                  <Input
+                    id="cooldown"
+                    type="number"
+                    value={formData.cooldownMinutes}
+                    onChange={(e) => setFormData({ ...formData, cooldownMinutes: parseInt(e.target.value) || 5 })}
+                  />
+                </div>
+              </div>
+
+              {/* Routing options */}
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="text-sm font-medium">Routing</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="routeDiscord" className="text-sm font-normal">Send to Discord</Label>
+                  <Switch
+                    id="routeDiscord"
+                    checked={formData.routeDiscord}
+                    onCheckedChange={(checked) => setFormData({ ...formData, routeDiscord: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="routeAutoTicket" className="text-sm font-normal">Auto-create ticket</Label>
+                  <Switch
+                    id="routeAutoTicket"
+                    checked={formData.routeAutoTicket}
+                    onCheckedChange={(checked) => setFormData({ ...formData, routeAutoTicket: checked })}
+                  />
+                </div>
               </div>
               <Button className="w-full" onClick={handleSubmit} disabled={isSaving || !formData.name}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
