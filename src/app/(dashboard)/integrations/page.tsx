@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plug,
   MessageSquare,
@@ -11,6 +11,7 @@ import {
   X,
   ExternalLink,
   Settings,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,11 +39,90 @@ interface Integration {
 }
 
 export default function IntegrationsPage() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [discordEnabled, setDiscordEnabled] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState("");
   const [linearEnabled, setLinearEnabled] = useState(false);
   const [linearApiKey, setLinearApiKey] = useState("");
   const [linearTeamId, setLinearTeamId] = useState("");
+
+  useEffect(() => {
+    loadIntegrations();
+  }, []);
+
+  const loadIntegrations = async () => {
+    try {
+      const response = await fetch("/api/config/integrations");
+      const data = await response.json();
+      if (data.success) {
+        setDiscordEnabled(data.discord?.enabled || false);
+        setDiscordWebhook(data.discord?.webhookUrl || "");
+        setLinearEnabled(data.ticketing?.provider === "linear" && !!data.ticketing?.linear?.apiKey);
+        setLinearApiKey(data.ticketing?.linear?.apiKey || "");
+        setLinearTeamId(data.ticketing?.linear?.teamId || "");
+      }
+    } catch (error) {
+      console.error("Failed to load integrations:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveDiscord = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/config/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          discord: {
+            enabled: discordEnabled,
+            webhookUrl: discordWebhook,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Discord settings saved!");
+      } else {
+        toast.error("Failed to save settings");
+      }
+    } catch {
+      toast.error("Failed to save settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveLinear = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/config/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticketing: {
+            provider: "linear",
+            linear: {
+              apiKey: linearApiKey,
+              teamId: linearTeamId,
+            },
+          },
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Linear settings saved!");
+      } else {
+        toast.error("Failed to save settings");
+      }
+    } catch {
+      toast.error("Failed to save settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const integrations: Integration[] = [
     {
@@ -204,7 +284,9 @@ export default function IntegrationsPage() {
                         >
                           Send Test Message
                         </Button>
-                        <Button className="flex-1">Save</Button>
+                        <Button className="flex-1" onClick={saveDiscord} disabled={isSaving}>
+                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                        </Button>
                       </div>
                     </div>
                   </DialogContent>
@@ -254,7 +336,9 @@ export default function IntegrationsPage() {
                           onChange={(e) => setLinearTeamId(e.target.value)}
                         />
                       </div>
-                      <Button className="w-full">Save</Button>
+                      <Button className="w-full" onClick={saveLinear} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                      </Button>
                     </div>
                   </DialogContent>
                 </Dialog>

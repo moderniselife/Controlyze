@@ -4,6 +4,25 @@ import { dirname, resolve } from "path";
 import { controlyzeConfigSchema, type ControlyzeConfig } from "./schema";
 
 const CONFIG_PATH = process.env.CONFIG_PATH || "./data/controlyze.yml";
+
+function substituteEnvVars(obj: any): any {
+  if (typeof obj === "string") {
+    return obj.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+      return process.env[varName] || match;
+    });
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(substituteEnvVars);
+  }
+  if (obj && typeof obj === "object") {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = substituteEnvVars(value);
+    }
+    return result;
+  }
+  return obj;
+}
 const DEFAULT_CONFIG: ControlyzeConfig = {
   version: "1",
   docker: {
@@ -115,7 +134,8 @@ export function loadConfig(): ControlyzeConfig {
   try {
     const content = readFileSync(configPath, "utf-8");
     const parsed = parse(content);
-    const result = controlyzeConfigSchema.safeParse(parsed);
+    const substituted = substituteEnvVars(parsed);
+    const result = controlyzeConfigSchema.safeParse(substituted);
 
     if (result.success) {
       cachedConfig = result.data;
