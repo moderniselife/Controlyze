@@ -129,6 +129,7 @@ export async function GET() {
       data: {
         enabled: config.statusPage?.enabled ?? true,
         title: config.statusPage?.title || "System Status",
+        domain: config.statusPage?.domain || "",
         services,
       },
     });
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
     config.statusPage = {
       enabled: body.enabled ?? true,
       title: body.title || "System Status",
+      domain: body.domain || "",
       services: body.services || [],
     };
 

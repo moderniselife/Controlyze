@@ -65,6 +65,7 @@ interface StatusServiceConfig {
 interface StatusPageConfig {
   enabled: boolean;
   title: string;
+  domain: string;
   services: StatusServiceConfig[];
 }
 
@@ -81,6 +82,7 @@ export default function SettingsPage() {
   const [statusConfig, setStatusConfig] = useState<StatusPageConfig>({
     enabled: true,
     title: "System Status",
+    domain: "",
     services: [],
   });
   const [statusLoading, setStatusLoading] = useState(true);
@@ -525,6 +527,20 @@ export default function SettingsPage() {
                     setStatusConfig((prev) => ({ ...prev, title: e.target.value }))
                   }
                   placeholder="System Status"
+                />
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label>Status Page Domain</Label>
+                <p className="text-sm text-muted-foreground">
+                  When accessing from this domain, automatically show the status page instead of the dashboard
+                </p>
+                <Input
+                  value={statusConfig.domain}
+                  onChange={(e) =>
+                    setStatusConfig((prev) => ({ ...prev, domain: e.target.value }))
+                  }
+                  placeholder="status.example.com"
                 />
               </div>
             </CardContent>

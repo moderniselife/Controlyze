@@ -7,6 +7,24 @@ const PUBLIC_ROUTES = ["/login", "/status", "/api/public", "/api/auth"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const host = request.headers.get("host") || "";
+  
+  // Check if this is the status page domain
+  // Can be configured via STATUS_PAGE_DOMAIN env var
+  const statusDomain = process.env.STATUS_PAGE_DOMAIN || "";
+  
+  if (statusDomain && host.includes(statusDomain)) {
+    // This is the status page domain - redirect root to /status
+    if (pathname === "/" || pathname === "") {
+      return NextResponse.redirect(new URL("/status", request.url));
+    }
+    // For status domain, only allow /status and public API routes
+    if (pathname.startsWith("/status") || pathname.startsWith("/api/public")) {
+      return NextResponse.next();
+    }
+    // Block other routes on status domain
+    return NextResponse.redirect(new URL("/status", request.url));
+  }
 
   // Allow public routes
   if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
