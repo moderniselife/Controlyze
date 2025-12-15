@@ -136,9 +136,17 @@ export const uiConfigSchema = z.object({
   refreshInterval: z.string().optional().default("5s"),
 });
 
+export const localUserSchema = z.object({
+  username: z.string(),
+  passwordHash: z.string(),
+});
+
 export const authConfigSchema = z.object({
   enabled: z.boolean().default(false),
   provider: z.enum(["local", "oauth", "proxy"]).optional(),
+  local: z.object({
+    users: z.array(localUserSchema),
+  }).optional(),
 });
 
 export const controlyzeConfigSchema = z.object({

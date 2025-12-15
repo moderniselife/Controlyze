@@ -25,22 +25,22 @@ function generateSessionId(): string {
   return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function isAuthEnabled(): Promise<boolean> {
+export function isAuthEnabled(): boolean {
   try {
-    const config = await loadConfig();
+    const config = loadConfig();
     return config.auth?.enabled === true;
   } catch {
     return false;
   }
 }
 
-export async function getUsers(): Promise<User[]> {
+export function getUsers(): User[] {
   try {
-    const config = await loadConfig();
+    const config = loadConfig();
     if (!config.auth?.enabled || config.auth.provider !== "local") {
       return [];
     }
-    return (config.auth as any).local?.users || [];
+    return config.auth.local?.users || [];
   } catch {
     return [];
   }
@@ -50,16 +50,21 @@ export async function validateCredentials(
   username: string,
   password: string
 ): Promise<boolean> {
-  const users = await getUsers();
+  const users = getUsers();
   const user = users.find((u) => u.username === username);
 
   if (!user) {
+    console.log("Auth: User not found:", username);
+    console.log("Auth: Available users:", users.map(u => u.username));
     return false;
   }
 
   try {
-    return await bcrypt.compare(password, user.passwordHash);
-  } catch {
+    const result = await bcrypt.compare(password, user.passwordHash);
+    console.log("Auth: Password validation result:", result);
+    return result;
+  } catch (error) {
+    console.error("Auth: bcrypt error:", error);
     return false;
   }
 }
@@ -107,7 +112,7 @@ export async function getCurrentUser(): Promise<string | null> {
 }
 
 export async function isAuthenticated(): Promise<boolean> {
-  const authEnabled = await isAuthEnabled();
+  const authEnabled = isAuthEnabled();
   if (!authEnabled) {
     return true; // No auth required
   }

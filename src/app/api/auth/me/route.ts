@@ -3,7 +3,7 @@ import { getCurrentUser, isAuthEnabled } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const authEnabled = await isAuthEnabled();
+    const authEnabled = isAuthEnabled();
 
     if (!authEnabled) {
       return NextResponse.json({

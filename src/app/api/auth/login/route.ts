@@ -9,7 +9,7 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    const authEnabled = await isAuthEnabled();
+    const authEnabled = isAuthEnabled();
     if (!authEnabled) {
       return NextResponse.json(
         { success: false, error: "Authentication is not enabled" },
