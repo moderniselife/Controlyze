@@ -73,7 +73,8 @@ function LoginForm() {
         <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-violet-600/15 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: "1s" }} />
         
         {/* Content */}
-        <div className="relative z-10 flex flex-col justify-center px-16 py-12">
+        <div className="relative z-10 flex flex-col justify-center items-center w-full px-8 py-12">
+          <div className="max-w-sm">
           {/* Logo and title */}
           <div className="mb-16">
             <div className="relative inline-block mb-8">
@@ -106,6 +107,7 @@ function LoginForm() {
                 </div>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>
