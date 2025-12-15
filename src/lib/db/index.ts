@@ -131,6 +131,16 @@ sqlite.exec(`
     pids INTEGER,
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS uptime_checks (
+    id TEXT PRIMARY KEY,
+    service_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    checked_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_uptime_checks_service ON uptime_checks(service_name);
+  CREATE INDEX IF NOT EXISTS idx_uptime_checks_time ON uptime_checks(checked_at);
 `);
 
 export const db = drizzle(sqlite, { schema });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listContainers } from "@/lib/docker/containers";
 import { listStacks } from "@/lib/docker/stacks";
 import { loadConfig } from "@/lib/config";
+import { getUptimeStats, recordUptimeCheck } from "@/lib/uptime/tracker";
 
 export interface ContainerInfo {
   id: string;
@@ -202,16 +203,16 @@ export async function GET() {
 
     const mockIncidents: PublicIncident[] = [];
 
+    // Record this check and get real uptime stats
+    await recordUptimeCheck();
+    const uptime = await getUptimeStats();
+
     const response: PublicStatusResponse = {
       overall: getOverallStatus(services),
       lastUpdated: new Date().toISOString(),
       services,
       incidents: mockIncidents,
-      uptime: {
-        last24h: 99.9,
-        last7d: 99.8,
-        last30d: 99.5,
-      },
+      uptime,
     };
 
     return NextResponse.json(response, {
