@@ -287,8 +287,9 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
           }
         }
 
-        // Send Discord notification
-        if (alert.routing?.discord && config.discord?.enabled && config.discord?.webhookUrl) {
+        // Send Discord notification (send if Discord is enabled globally, unless explicitly disabled for this alert)
+        if (config.discord?.enabled && config.discord?.webhookUrl && alert.routing?.discord !== false) {
+          console.log(`[Alerts] Sending Discord notification for alert: ${alert.name}`);
           await sendDiscordNotification(
             config.discord.webhookUrl,
             alert,
