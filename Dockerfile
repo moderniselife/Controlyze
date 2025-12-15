@@ -1,4 +1,4 @@
-FROM oven/bun:1-debian AS base
+FROM oven/bun:latest AS base
 
 # Install dependencies only when needed
 FROM base AS deps
