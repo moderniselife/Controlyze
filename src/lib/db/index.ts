@@ -14,6 +14,18 @@ if (!existsSync(dbDir)) {
 const sqlite = new Database(DB_PATH);
 sqlite.pragma("journal_mode = WAL");
 
+// Helper to safely add columns (ignores if already exists)
+function safeAddColumn(table: string, column: string, type: string) {
+  try {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (e: unknown) {
+    // Column already exists, ignore
+    if (e instanceof Error && !e.message.includes("duplicate column")) {
+      console.error(`Failed to add column ${column} to ${table}:`, e);
+    }
+  }
+}
+
 // Auto-create tables if they don't exist
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS containers (
@@ -180,6 +192,10 @@ sqlite.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 `);
+
+// Run migrations for new columns on existing tables
+safeAddColumn("incidents", "affected_services", "TEXT");
+safeAddColumn("incidents", "is_public", "INTEGER DEFAULT 1");
 
 export const db = drizzle(sqlite, { schema });
 
