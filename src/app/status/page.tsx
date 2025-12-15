@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, AlertTriangle, XCircle, Clock, Zap } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, Clock, Zap, ChevronDown, ChevronUp, Box } from "lucide-react";
+import Image from "next/image";
+
+interface ContainerInfo {
+  id: string;
+  name: string;
+  status: string;
+  state: string;
+  healthStatus?: string;
+}
 
 interface PublicServiceStatus {
   name: string;
   displayName: string;
   status: "operational" | "degraded" | "down" | "maintenance";
   group: string;
+  icon?: string;
+  containers: ContainerInfo[];
 }
 
 interface PublicIncident {
@@ -90,6 +101,19 @@ export default function PublicStatusPage() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
+
+  const toggleService = (serviceName: string) => {
+    setExpandedServices((prev) => {
+      const next = new Set(prev);
+      if (next.has(serviceName)) {
+        next.delete(serviceName);
+      } else {
+        next.add(serviceName);
+      }
+      return next;
+    });
+  };
 
   const fetchStatus = async () => {
     try {
@@ -129,10 +153,10 @@ export default function PublicStatusPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white selection:bg-emerald-500/30">
       <div
-        className={`absolute inset-0 bg-gradient-to-b ${overallConfig.gradient} pointer-events-none`}
+        className={`fixed inset-0 bg-linear-to-b ${overallConfig.gradient} pointer-events-none`}
       />
 
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
       </div>
@@ -227,44 +251,100 @@ export default function PublicStatusPage() {
                     <div className="space-y-2">
                       {services.map((service) => {
                         const config = serviceStatusConfig[service.status];
+                        const isExpanded = expandedServices.has(service.name);
+                        const hasContainers = service.containers && service.containers.length > 0;
                         return (
-                          <div
-                            key={service.name}
-                            className="group relative overflow-hidden rounded-xl bg-white/5 border border-white/10 p-4 flex items-center justify-between hover:bg-white/[0.07] transition-all duration-300"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div
-                                className={`w-2.5 h-2.5 rounded-full ${config.color} shadow-lg shadow-current/50`}
-                              />
-                              <span className="font-medium text-white">
-                                {service.displayName}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-sm ${
-                                service.status === "operational"
-                                  ? "text-emerald-400"
-                                  : service.status === "degraded"
-                                  ? "text-amber-400"
-                                  : service.status === "down"
-                                  ? "text-red-400"
-                                  : "text-blue-400"
-                              }`}
-                            >
-                              {config.label}
-                            </span>
-
+                          <div key={service.name} className="space-y-1">
                             <div
-                              className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${
-                                service.status === "operational"
-                                  ? "from-emerald-500/5"
-                                  : service.status === "degraded"
-                                  ? "from-amber-500/5"
-                                  : service.status === "down"
-                                  ? "from-red-500/5"
-                                  : "from-blue-500/5"
-                              } to-transparent pointer-events-none`}
-                            />
+                              onClick={() => hasContainers && toggleService(service.name)}
+                              className={`group relative overflow-hidden rounded-xl bg-white/5 border border-white/10 p-4 flex items-center justify-between hover:bg-white/[0.07] transition-all duration-300 ${hasContainers ? "cursor-pointer" : ""}`}
+                            >
+                              <div className="flex items-center gap-4">
+                                <div
+                                  className={`w-2.5 h-2.5 rounded-full ${config.color} shadow-lg shadow-current/50`}
+                                />
+                                {service.icon && (
+                                  <img
+                                    src={service.icon}
+                                    alt={service.displayName}
+                                    className="w-6 h-6 object-contain"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = "none";
+                                    }}
+                                  />
+                                )}
+                                <span className="font-medium text-white">
+                                  {service.displayName}
+                                </span>
+                                {hasContainers && (
+                                  <span className="text-xs text-zinc-500">
+                                    ({service.containers.length} container{service.containers.length !== 1 ? "s" : ""})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`text-sm ${
+                                    service.status === "operational"
+                                      ? "text-emerald-400"
+                                      : service.status === "degraded"
+                                      ? "text-amber-400"
+                                      : service.status === "down"
+                                      ? "text-red-400"
+                                      : "text-blue-400"
+                                  }`}
+                                >
+                                  {config.label}
+                                </span>
+                                {hasContainers && (
+                                  isExpanded ? (
+                                    <ChevronUp className="h-4 w-4 text-zinc-500" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                  )
+                                )}
+                              </div>
+
+                              <div
+                                className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-linear-to-r ${
+                                  service.status === "operational"
+                                    ? "from-emerald-500/5"
+                                    : service.status === "degraded"
+                                    ? "from-amber-500/5"
+                                    : service.status === "down"
+                                    ? "from-red-500/5"
+                                    : "from-blue-500/5"
+                                } to-transparent pointer-events-none`}
+                              />
+                            </div>
+                            
+                            {isExpanded && hasContainers && (
+                              <div className="ml-6 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                {service.containers.map((container) => (
+                                  <div
+                                    key={container.id}
+                                    className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/5"
+                                  >
+                                    <Box className="h-4 w-4 text-zinc-500" />
+                                    <span className="text-sm text-zinc-300 font-mono">
+                                      {container.name}
+                                    </span>
+                                    <span
+                                      className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+                                        container.state === "running"
+                                          ? container.healthStatus === "unhealthy"
+                                            ? "bg-amber-500/10 text-amber-400"
+                                            : "bg-emerald-500/10 text-emerald-400"
+                                          : "bg-red-500/10 text-red-400"
+                                      }`}
+                                    >
+                                      {container.state}
+                                      {container.healthStatus && container.healthStatus !== "none" && ` (${container.healthStatus})`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
