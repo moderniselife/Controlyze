@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:20-bookworm-slim AS base
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -6,8 +7,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 FROM base AS deps
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline || npm install
 
 # Build the application
 FROM base AS builder
@@ -15,7 +17,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build -- --webpack
+RUN --mount=type=cache,target=/root/.npm \
+    npm run build -- --webpack
 
 # Production image
 FROM node:20-bookworm-slim AS runner
