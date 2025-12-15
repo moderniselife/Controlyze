@@ -142,13 +142,19 @@ docker:
     type: socket
     socketPath: /var/run/docker.sock
 
-statusPage:
-  enabled: true
-  title: "System Status"
-  domain: "status.example.com"  # Optional: dedicated status page domain
+stacks:
+  profiles:
+    schrostack:
+      enabled: true
+      services:
+        media: [plex, jellyfin, tunarr, overseerr, tautulli]
+        indexers: [prowlarr, jackett, flaresolverr*]
+        automation: [schrodrive, watchtower, pd_zurg]
+        infrastructure: [cloudflare-tunnel, gluetun]
 
 alerts:
   rules:
+    # Generic alerts for all containers
     - name: container_unhealthy
       enabled: true
       condition:
@@ -156,33 +162,58 @@ alerts:
         status: unhealthy
         duration: 30s
       severity: warning
-      cooldownMinutes: 5
       routing:
         discord: true
-        createIncident: true
 
-    - name: high_memory_usage
+    # Container-specific alerts
+    - name: plex_down
+      enabled: true
+      description: "Plex media server is not running"
+      condition:
+        container: plex
+        type: container_status
+        status: exited
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+
+    - name: zurg_mount_failed
       enabled: true
       condition:
-        type: resource_threshold
-        metric: memory_percent
-        threshold: 90
+        container: pd_zurg
+        type: health_status
+        status: unhealthy
         duration: 60s
       severity: critical
       routing:
         discord: true
 
-    - name: plex_restart_loop
+    # Resource monitoring
+    - name: plex_high_memory
       enabled: true
       condition:
-        type: restart_count
-        threshold: 3
-        window: 5m
         container: plex
-      severity: critical
-      routing:
-        discord: true
-        autoTicket: true
+        type: resource_threshold
+        metric: memory_percent
+        threshold: 85
+        duration: 5m
+      severity: warning
+
+    # Log pattern matching
+    - name: schrodrive_errors
+      enabled: true
+      condition:
+        container: schrodrive
+        type: log_pattern
+        pattern: "(?i)(error|failed|exception)"
+        excludePattern: "(?i)(retry|expected)"
+      severity: warning
+      dedupWindow: 10m
+
+  defaults:
+    cooldown: 5m
+    dedupEnabled: true
 
 discord:
   enabled: true
@@ -193,6 +224,19 @@ ticketing:
   linear:
     apiKey: ${LINEAR_API_KEY}
     teamId: ${LINEAR_TEAM_ID}
+
+auth:
+  enabled: true
+  provider: local
+  local:
+    users:
+      - username: admin
+        passwordHash: ${ADMIN_PASSWORD_HASH}
+
+statusPage:
+  enabled: true
+  title: "System Status"
+  domain: status.example.com
 
 ui:
   theme: dark
