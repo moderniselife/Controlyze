@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline || npm install
+    npm install
 
 # Build the application
 FROM base AS builder
