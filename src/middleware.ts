@@ -5,13 +5,56 @@ const SESSION_COOKIE = "controlyze_session";
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ["/login", "/status", "/api/public", "/api/auth"];
 
+// Cache for status domain fetched from API
+let cachedStatusDomain: string | null = null;
+let cacheTime = 0;
+const CACHE_DURATION = 60000; // 1 minute cache
+
+async function getStatusDomain(request: NextRequest): Promise<string> {
+  // Check environment variable first (fast path)
+  if (process.env.STATUS_PAGE_DOMAIN) {
+    return process.env.STATUS_PAGE_DOMAIN;
+  }
+  
+  // Return cached value if still valid
+  const now = Date.now();
+  if (cachedStatusDomain !== null && now - cacheTime < CACHE_DURATION) {
+    return cachedStatusDomain;
+  }
+
+  // Fetch from internal API (runs on server start and caches)
+  try {
+    const baseUrl = request.nextUrl.origin;
+    const response = await fetch(`${baseUrl}/api/internal/status-domain`, {
+      headers: { "x-internal-request": "true" },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const domain = data.domain || "";
+      cachedStatusDomain = domain;
+      cacheTime = now;
+      return domain;
+    }
+  } catch {
+    // Silently fail - will use empty string
+  }
+
+  cachedStatusDomain = "";
+  cacheTime = now;
+  return "";
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") || "";
   
+  // Skip API calls for internal requests to prevent loops
+  if (pathname.startsWith("/api/internal/")) {
+    return NextResponse.next();
+  }
+  
   // Check if this is the status page domain
-  // Can be configured via STATUS_PAGE_DOMAIN env var
-  const statusDomain = process.env.STATUS_PAGE_DOMAIN || "";
+  const statusDomain = await getStatusDomain(request);
   
   if (statusDomain && host.includes(statusDomain)) {
     // This is the status page domain - redirect root to /status
