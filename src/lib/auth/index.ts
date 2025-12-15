@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import { loadRawConfig } from "@/lib/config";
 import { cookies } from "next/headers";
+import { db } from "@/lib/db";
+import { sessions } from "@/lib/db/schema";
+import { eq, lt } from "drizzle-orm";
 
 const SESSION_COOKIE = "controlyze_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -9,15 +12,6 @@ interface User {
   username: string;
   passwordHash: string;
 }
-
-interface Session {
-  username: string;
-  expiresAt: number;
-}
-
-// Simple in-memory session store (for single-instance deployments)
-// In production with multiple instances, use Redis or DB
-const sessions = new Map<string, Session>();
 
 function generateSessionId(): string {
   const array = new Uint8Array(32);
@@ -76,26 +70,35 @@ export async function validateCredentials(
 
 export async function createSession(username: string): Promise<string> {
   const sessionId = generateSessionId();
-  const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
+  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE * 1000);
+  const createdAt = new Date();
 
-  sessions.set(sessionId, { username, expiresAt });
-  console.log(`[Auth] Session created: ${sessionId.substring(0, 8)}... for user ${username}, total sessions: ${sessions.size}`);
+  await db.insert(sessions).values({
+    id: sessionId,
+    username,
+    expiresAt,
+    createdAt,
+  });
+  
+  console.log(`[Auth] Session created in DB: ${sessionId.substring(0, 8)}... for user ${username}`);
 
   return sessionId;
 }
 
 export async function validateSession(sessionId: string): Promise<string | null> {
-  console.log(`[Auth] Validating session: ${sessionId.substring(0, 8)}..., total sessions in memory: ${sessions.size}`);
-  const session = sessions.get(sessionId);
+  console.log(`[Auth] Validating session: ${sessionId.substring(0, 8)}...`);
+  
+  const result = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+  const session = result[0];
 
   if (!session) {
-    console.log(`[Auth] Session not found in memory`);
+    console.log(`[Auth] Session not found in DB`);
     return null;
   }
 
-  if (Date.now() > session.expiresAt) {
-    console.log(`[Auth] Session expired`);
-    sessions.delete(sessionId);
+  if (new Date() > session.expiresAt) {
+    console.log(`[Auth] Session expired, deleting`);
+    await db.delete(sessions).where(eq(sessions.id, sessionId));
     return null;
   }
 
@@ -104,7 +107,12 @@ export async function validateSession(sessionId: string): Promise<string | null>
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
-  sessions.delete(sessionId);
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
+}
+
+// Clean up expired sessions periodically
+export async function cleanupExpiredSessions(): Promise<void> {
+  await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
 }
 
 export async function getSessionFromCookies(): Promise<string | null> {

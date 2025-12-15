@@ -198,3 +198,13 @@ export const uptimeRecords = sqliteTable("uptime_records", {
 
 export type UptimeRecord = typeof uptimeRecords.$inferSelect;
 export type NewUptimeRecord = typeof uptimeRecords.$inferInsert;
+
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  username: text("username").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
