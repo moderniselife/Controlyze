@@ -42,6 +42,10 @@ interface StatusData {
     last30d: number;
     trackingSince: string | null;
   };
+  config?: {
+    enabled: boolean;
+    title: string;
+  };
 }
 
 const statusConfig = {
@@ -164,6 +168,16 @@ export default function PublicStatusPage() {
 
       <div className="relative max-w-4xl mx-auto px-6 py-12">
         <header className="text-center mb-12">
+          <div className="inline-flex items-center justify-center mb-6">
+            <Image
+              src="/logo.png"
+              alt="Logo"
+              width={64}
+              height={64}
+              className="rounded-xl"
+            />
+          </div>
+
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6">
             <Zap className="h-4 w-4 text-emerald-400" />
             <span className="text-sm text-zinc-400">Live Status</span>
@@ -171,7 +185,7 @@ export default function PublicStatusPage() {
 
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             <span className="bg-gradient-to-r from-white via-white to-zinc-400 bg-clip-text text-transparent">
-              System Status
+              {status?.config?.title || "System Status"}
             </span>
           </h1>
 
@@ -186,6 +200,14 @@ export default function PublicStatusPage() {
               <div className="w-12 h-12 rounded-full border-2 border-zinc-800" />
               <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-t-emerald-500 animate-spin" />
             </div>
+          </div>
+        ) : status?.config?.enabled === false ? (
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-800/50 mb-4">
+              <XCircle className="w-8 h-8 text-zinc-500" />
+            </div>
+            <h2 className="text-xl font-semibold text-zinc-400 mb-2">Status Page Disabled</h2>
+            <p className="text-zinc-600">The status page has been disabled by the administrator.</p>
           </div>
         ) : status ? (
           <>

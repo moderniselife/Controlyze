@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import packageJson from "../../../package.json";
@@ -91,9 +92,13 @@ export function AppSidebar() {
     <Sidebar className="border-r border-border/40">
       <SidebarHeader className="border-b border-border/40 px-6 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            C
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Controlyze"
+            width={32}
+            height={32}
+            className="rounded-lg"
+          />
           <span className="text-lg font-semibold tracking-tight">
             Controlyze
           </span>

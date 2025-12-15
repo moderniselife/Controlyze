@@ -2,10 +2,11 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lock, User, AlertCircle, Loader2 } from "lucide-react";
+import { User, AlertCircle, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Image from "next/image";
 
 function LoginForm() {
   const router = useRouter();
@@ -54,8 +55,14 @@ function LoginForm() {
 
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-emerald-500 mb-4">
-            <Lock className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center mb-4">
+            <Image
+              src="/logo.png"
+              alt="Controlyze"
+              width={80}
+              height={80}
+              className="rounded-2xl"
+            />
           </div>
           <h1 className="text-2xl font-bold text-white">Controlyze</h1>
           <p className="text-zinc-500 mt-2">Sign in to your dashboard</p>

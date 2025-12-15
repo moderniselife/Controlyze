@@ -281,7 +281,7 @@ export async function GET() {
       ? earliestRecord[0].checkedAt.toISOString() 
       : null;
 
-    const response: PublicStatusResponse = {
+    const response = {
       overall: getOverallStatus(services, serviceConfigs),
       lastUpdated: new Date().toISOString(),
       services,
@@ -291,6 +291,10 @@ export async function GET() {
         last7d: uptime7d,
         last30d: uptime30d,
         trackingSince,
+      },
+      config: {
+        enabled: config.statusPage?.enabled ?? true,
+        title: config.statusPage?.title || "System Status",
       },
     };
 
