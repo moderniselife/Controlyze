@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getContainerStats } from "@/lib/docker/containers";
 
+// Disable Next.js caching for this route
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
