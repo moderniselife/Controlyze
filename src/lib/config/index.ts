@@ -165,6 +165,35 @@ export function saveConfig(config: ControlyzeConfig): void {
   cachedConfig = config;
 }
 
+export function loadRawConfig(): Record<string, any> {
+  const configPath = resolve(CONFIG_PATH);
+
+  if (!existsSync(configPath)) {
+    return {};
+  }
+
+  try {
+    const content = readFileSync(configPath, "utf-8");
+    return parse(content) || {};
+  } catch (error) {
+    console.error("Error loading raw config:", error);
+    return {};
+  }
+}
+
+export function saveRawConfig(config: Record<string, any>): void {
+  const configPath = resolve(CONFIG_PATH);
+  const configDir = dirname(configPath);
+
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+
+  const content = stringify(config, { indent: 2 });
+  writeFileSync(configPath, content, "utf-8");
+  cachedConfig = null; // Invalidate cache
+}
+
 export function resetConfigCache(): void {
   cachedConfig = null;
 }

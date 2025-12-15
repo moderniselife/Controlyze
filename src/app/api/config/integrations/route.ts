@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadConfig, saveConfig, resetConfigCache } from "@/lib/config";
+import { loadConfig, loadRawConfig, saveRawConfig, resetConfigCache } from "@/lib/config";
 
 export async function GET() {
   try {
-    const config = loadConfig();
+    const config = loadRawConfig();
 
     return NextResponse.json({
       success: true,
@@ -37,7 +37,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const config = loadConfig();
+    const config = loadRawConfig();
 
     if (body.discord !== undefined) {
       config.discord = {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       config.ticketing = ticketing;
     }
 
-    saveConfig(config);
+    saveRawConfig(config);
     resetConfigCache();
 
     return NextResponse.json({ success: true });
