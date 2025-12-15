@@ -1,9 +1,12 @@
 # Controlyze Configuration Example
 # Copy this file to ./data/controlyze.yml and customize for your setup
+# https://github.com/moderniselife/controlyze
 
 version: "1"
 
-# Docker connection settings
+# =============================================================================
+# DOCKER CONNECTION
+# =============================================================================
 docker:
   connection:
     type: socket  # socket | tcp | ssh
@@ -18,27 +21,29 @@ docker:
     #   cert: /path/to/cert.pem
     #   key: /path/to/key.pem
 
-# Stack detection and profiles
+# =============================================================================
+# STACK DETECTION & PROFILES
+# =============================================================================
 stacks:
   detection:
     enabled: true
     paths:
       - /home/*/docker-*.yml
       - /opt/stacks/**/docker-compose.yml
-  
   profiles:
-    # SchroStack profile - auto-detected for media server stacks
     schrostack:
       enabled: true
       composeFile: docker-SchroStack.yml
       services:
         media:
           - plex
+          - jellyfin
           - tunarr
           - overseerr
           - tautulli
         indexers:
           - prowlarr
+          - jackett
           - flaresolverr*
         automation:
           - schrodrive
@@ -47,10 +52,14 @@ stacks:
         infrastructure:
           - cloudflare-tunnel
           - flaresolverr-lb
+          - gluetun
 
-# Alert rules
+# =============================================================================
+# ALERT RULES
+# =============================================================================
 alerts:
   rules:
+    # --- GENERIC ALERTS (all containers) ---
     - name: container_unhealthy
       enabled: true
       condition:
@@ -60,7 +69,7 @@ alerts:
       severity: warning
       routing:
         discord: true
-        
+
     - name: restart_loop
       enabled: true
       condition:
@@ -71,7 +80,7 @@ alerts:
       routing:
         discord: true
         autoTicket: true
-        
+
     - name: high_memory
       enabled: true
       condition:
@@ -80,13 +89,141 @@ alerts:
         threshold: 90
         duration: 2m
       severity: warning
-      
-    - name: log_error
-      enabled: false
+
+    # --- CRITICAL: Core Media Services ---
+    - name: plex_unhealthy
+      enabled: true
+      description: "Plex media server is unhealthy"
       condition:
+        container: plex
+        type: health_status
+        status: unhealthy
+        duration: 30s
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+
+    - name: plex_down
+      enabled: true
+      description: "Plex media server is not running"
+      condition:
+        container: plex
+        type: container_status
+        status: exited
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+
+    - name: zurg_mount_failed
+      enabled: true
+      description: "pd_zurg mount healthcheck failed"
+      condition:
+        container: pd_zurg
+        type: health_status
+        status: unhealthy
+        duration: 60s
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+
+    # --- WARNING: Secondary Services ---
+    - name: overseerr_restart_loop
+      enabled: true
+      description: "Overseerr is restarting repeatedly"
+      condition:
+        container: overseerr
+        type: restart_count
+        threshold: 3
+        window: 10m
+      severity: warning
+      routing:
+        discord: true
+
+    - name: prowlarr_unhealthy
+      enabled: true
+      description: "Prowlarr indexer manager is unhealthy"
+      condition:
+        container: prowlarr
+        type: health_status
+        status: unhealthy
+        duration: 2m
+      severity: warning
+      routing:
+        discord: true
+
+    - name: schrodrive_errors
+      enabled: true
+      description: "SchroDrive automation errors detected"
+      condition:
+        container: schrodrive
         type: log_pattern
-        pattern: "(?i)(error|exception|fatal)"
-        excludePattern: "(?i)(expected|handled)"
+        pattern: "(?i)(error|failed|exception|timeout)"
+        excludePattern: "(?i)(retry|expected)"
+      severity: warning
+      routing:
+        discord: true
+      dedupWindow: 10m
+
+    - name: tunnel_down
+      enabled: true
+      description: "Cloudflare tunnel is not running"
+      condition:
+        container: cloudflare-tunnel
+        type: container_status
+        status: exited
+      severity: critical
+      routing:
+        discord: true
+        autoTicket: true
+
+    # --- RESOURCE ALERTS ---
+    - name: plex_high_memory
+      enabled: true
+      description: "Plex using excessive memory (transcoding?)"
+      condition:
+        container: plex
+        type: resource_threshold
+        metric: memory_percent
+        threshold: 85
+        duration: 5m
+      severity: warning
+      routing:
+        discord: true
+
+    - name: tunarr_high_cpu
+      enabled: true
+      description: "Tunarr high CPU usage"
+      condition:
+        container: tunarr
+        type: resource_threshold
+        metric: cpu_percent
+        threshold: 90
+        duration: 5m
+      severity: warning
+      routing:
+        discord: true
+
+    # --- INDEXER POOL HEALTH ---
+    - name: flaresolverr_pool_degraded
+      enabled: true
+      description: "FlareSolverr pool has unhealthy instances"
+      condition:
+        container: flaresolverr*
+        type: health_status
+        status: unhealthy
+      severity: info
+      dedupWindow: 15m
+
+    - name: any_container_restart
+      enabled: true
+      description: "Any container restarted"
+      condition:
+        type: restart_count
+        threshold: 1
+        window: 5m
       severity: info
       dedupWindow: 5m
 
@@ -94,52 +231,31 @@ alerts:
     cooldown: 5m
     dedupEnabled: true
 
-# Discord integration
+# =============================================================================
+# DISCORD INTEGRATION
+# =============================================================================
 discord:
-  enabled: false
+  enabled: true
   webhookUrl: ${DISCORD_WEBHOOK_URL}
-  # Optional: Use bot token for thread support
-  # botToken: ${DISCORD_BOT_TOKEN}
-  
-  routing:
-    defaultChannel: alerts
-    severityChannels:
-      critical: critical-alerts
-      warning: alerts
-      info: logs
-      
-  format:
-    includeLogs: true
-    logLines: 10
-    includeMetrics: true
 
-# Ticketing integration
+# =============================================================================
+# TICKETING INTEGRATION
+# =============================================================================
 ticketing:
   provider: linear  # linear | github | webhook
-  
   linear:
     apiKey: ${LINEAR_API_KEY}
     teamId: ${LINEAR_TEAM_ID}
-    
   # github:
   #   token: ${GITHUB_TOKEN}
   #   owner: your-org
   #   repo: incidents
-    
   # webhook:
   #   url: https://your-webhook-endpoint.com/tickets
-  #   headers:
-  #     Authorization: Bearer ${WEBHOOK_TOKEN}
-    
-  mapping:
-    severityToPriority:
-      critical: urgent
-      warning: high
-      info: medium
-    stackToProject:
-      schrostack: "Media Infrastructure"
 
-# Log settings
+# =============================================================================
+# LOG SETTINGS
+# =============================================================================
 logs:
   retentionDays: 7
   indexEnabled: true
@@ -149,17 +265,30 @@ logs:
       - "(?i)(api[_-]?key|token|secret|password)\\s*[=:]\\s*\\S+"
       - "Bearer\\s+[A-Za-z0-9\\-_.]+"
 
-# UI settings
+# =============================================================================
+# UI SETTINGS
+# =============================================================================
 ui:
   theme: dark  # dark | light | system
   defaultView: overview
   refreshInterval: 5s
 
-# Authentication (optional)
+# =============================================================================
+# AUTHENTICATION
+# =============================================================================
 auth:
-  enabled: false
-  # provider: local  # local | oauth | proxy
-  # local:
-  #   users:
-  #     - username: admin
-  #       passwordHash: ${ADMIN_PASSWORD_HASH}
+  enabled: true
+  provider: local
+  local:
+    users:
+      - username: admin
+        passwordHash: ${ADMIN_PASSWORD_HASH}  # Generate with: htpasswd -nbBC 12 "" "yourpassword" | tr -d ':'
+
+# =============================================================================
+# STATUS PAGE
+# =============================================================================
+statusPage:
+  enabled: true
+  title: "System Status"
+  domain: status.example.com  # Optional: dedicated status page subdomain
+  # Services are auto-detected from containers - configure in Settings UI
