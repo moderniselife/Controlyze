@@ -45,6 +45,7 @@ next-env.d.ts
 *.db
 *.db-journal
 controlyze.yml
+docker-SchroStack.yml
 
 # drizzle
 /drizzle/
