@@ -13,6 +13,8 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Globe,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +43,20 @@ interface AuthConfig {
   users: AuthUser[];
 }
 
+interface StatusServiceConfig {
+  name: string;
+  displayName: string;
+  group: string;
+  enabled: boolean;
+  impact: "critical" | "major" | "minor";
+}
+
+interface StatusPageConfig {
+  enabled: boolean;
+  title: string;
+  services: StatusServiceConfig[];
+}
+
 export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [authConfig, setAuthConfig] = useState<AuthConfig>({
@@ -51,9 +67,16 @@ export default function SettingsPage() {
   const [newUser, setNewUser] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [statusConfig, setStatusConfig] = useState<StatusPageConfig>({
+    enabled: true,
+    title: "System Status",
+    services: [],
+  });
+  const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
     fetchAuthConfig();
+    fetchStatusConfig();
   }, []);
 
   const fetchAuthConfig = async () => {
@@ -138,6 +161,59 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchStatusConfig = async () => {
+    try {
+      const response = await fetch("/api/config/status");
+      const data = await response.json();
+      if (data.success) {
+        setStatusConfig(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch status config:", error);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleSaveStatus = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/config/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(statusConfig),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Status page settings saved");
+      } else {
+        toast.error(data.error || "Failed to save status settings");
+      }
+    } catch (error) {
+      toast.error("Failed to save status settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateServiceImpact = (serviceName: string, impact: "critical" | "major" | "minor") => {
+    setStatusConfig((prev) => ({
+      ...prev,
+      services: prev.services.map((s) =>
+        s.name === serviceName ? { ...s, impact } : s
+      ),
+    }));
+  };
+
+  const toggleServiceEnabled = (serviceName: string) => {
+    setStatusConfig((prev) => ({
+      ...prev,
+      services: prev.services.map((s) =>
+        s.name === serviceName ? { ...s, enabled: !s.enabled } : s
+      ),
+    }));
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -178,6 +254,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
+          <TabsTrigger value="status">Status Page</TabsTrigger>
           <TabsTrigger value="docker">Docker</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -374,6 +451,125 @@ export default function SettingsPage() {
                   Save Authentication Settings
                 </Button>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="status" className="space-y-6">
+          <Card className="bg-card/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Public Status Page
+              </CardTitle>
+              <CardDescription>
+                Configure which services appear on the public status page and their impact level
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Enable Status Page</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Make status page available at /status
+                  </p>
+                </div>
+                <Switch
+                  checked={statusConfig.enabled}
+                  onCheckedChange={(checked) =>
+                    setStatusConfig((prev) => ({ ...prev, enabled: checked }))
+                  }
+                />
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label>Page Title</Label>
+                <Input
+                  value={statusConfig.title}
+                  onChange={(e) =>
+                    setStatusConfig((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="System Status"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                Service Impact Levels
+              </CardTitle>
+              <CardDescription>
+                Configure how each service affects the overall status. Minor services won&apos;t cause a &quot;Major Outage&quot; status.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {statusLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : statusConfig.services.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No services configured. Services will be auto-detected from your containers.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {statusConfig.services.map((service) => (
+                    <div
+                      key={service.name}
+                      className="flex items-center justify-between p-3 rounded-lg bg-background/50 border"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={service.enabled}
+                          onCheckedChange={() => toggleServiceEnabled(service.name)}
+                        />
+                        <div>
+                          <span className="font-medium">{service.displayName}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({service.group})</span>
+                        </div>
+                      </div>
+                      <Select
+                        value={service.impact}
+                        onValueChange={(value: "critical" | "major" | "minor") =>
+                          updateServiceImpact(service.name, value)
+                        }
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="critical">
+                            <span className="text-red-500">Critical</span>
+                          </SelectItem>
+                          <SelectItem value="major">
+                            <span className="text-amber-500">Major</span>
+                          </SelectItem>
+                          <SelectItem value="minor">
+                            <span className="text-blue-500">Minor</span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Separator />
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p><strong className="text-red-500">Critical:</strong> Core services - if down, shows &quot;Major Outage&quot;</p>
+                <p><strong className="text-amber-500">Major:</strong> Important services - if down, shows &quot;Partial Outage&quot;</p>
+                <p><strong className="text-blue-500">Minor:</strong> Non-essential services - if down, doesn&apos;t affect overall status</p>
+              </div>
+              <Button onClick={handleSaveStatus} disabled={isSaving} className="w-full">
+                {isSaving ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Status Page Settings
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

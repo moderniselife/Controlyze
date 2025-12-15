@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listContainers } from "@/lib/docker/containers";
 import { getOverallUptime } from "@/lib/uptime/tracker";
+import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
 import { incidents } from "@/lib/db/schema";
 import { desc, gte } from "drizzle-orm";
@@ -131,19 +132,38 @@ function getServiceStatus(
 }
 
 function getOverallStatus(
-  services: PublicServiceStatus[]
+  services: PublicServiceStatus[],
+  serviceConfigs: Record<string, { enabled: boolean; impact: string }>
 ): PublicStatusResponse["overall"] {
-  const hasDown = services.some((s) => s.status === "down");
-  const hasDegraded = services.some((s) => s.status === "degraded");
+  // Only consider enabled services with their impact levels
+  const criticalDown = services.some((s) => {
+    const cfg = serviceConfigs[s.name];
+    return s.status === "down" && (!cfg || cfg.enabled) && cfg?.impact === "critical";
+  });
+  const majorDown = services.some((s) => {
+    const cfg = serviceConfigs[s.name];
+    return s.status === "down" && (!cfg || cfg.enabled) && cfg?.impact === "major";
+  });
+  const criticalDegraded = services.some((s) => {
+    const cfg = serviceConfigs[s.name];
+    return s.status === "degraded" && (!cfg || cfg.enabled) && cfg?.impact === "critical";
+  });
 
-  if (hasDown) return "down";
-  if (hasDegraded) return "degraded";
+  if (criticalDown) return "down";
+  if (majorDown || criticalDegraded) return "degraded";
   return "operational";
 }
 
 export async function GET() {
   try {
     const containers = await listContainers(true);
+    const config = loadRawConfig();
+    
+    // Build service config map from saved settings
+    const serviceConfigs: Record<string, { enabled: boolean; impact: string }> = {};
+    for (const svc of config.statusPage?.services || []) {
+      serviceConfigs[svc.name] = { enabled: svc.enabled ?? true, impact: svc.impact || "major" };
+    }
 
     const serviceMap = new Map<string, PublicServiceStatus>();
 
@@ -229,7 +249,7 @@ export async function GET() {
     }));
 
     const response: PublicStatusResponse = {
-      overall: getOverallStatus(services),
+      overall: getOverallStatus(services, serviceConfigs),
       lastUpdated: new Date().toISOString(),
       services,
       incidents: publicIncidents,
