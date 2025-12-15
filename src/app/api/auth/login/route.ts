@@ -42,9 +42,13 @@ export async function POST(request: NextRequest) {
       user: { username },
     });
 
+    // Only set Secure flag if actually accessed via HTTPS
+    const isHttps = request.headers.get("x-forwarded-proto") === "https" ||
+                    request.url.startsWith("https://");
+
     response.cookies.set(SESSION_COOKIE, sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
       sameSite: "lax",
       maxAge: SESSION_MAX_AGE,
       path: "/",
