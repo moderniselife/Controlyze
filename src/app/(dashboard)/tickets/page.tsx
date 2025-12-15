@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Ticket,
   ExternalLink,
@@ -9,6 +9,7 @@ import {
   Check,
   Clock,
   AlertCircle,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,46 +29,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface TicketInfo {
   id: string;
   externalId: string;
-  externalUrl: string;
+  externalUrl?: string;
   provider: string;
   title: string;
   status: string;
   priority: string;
-  incidentId: string;
+  incidentId?: string;
   createdAt: string;
-  lastSynced: string;
+  updatedAt?: string;
+  source: string;
 }
-
-const mockTickets: TicketInfo[] = [
-  {
-    id: "1",
-    externalId: "LIN-123",
-    externalUrl: "https://linear.app/team/LIN-123",
-    provider: "linear",
-    title: "Plex container unhealthy",
-    status: "In Progress",
-    priority: "High",
-    incidentId: "inc-001",
-    createdAt: "2024-12-15T10:30:00Z",
-    lastSynced: "2024-12-15T11:00:00Z",
-  },
-  {
-    id: "2",
-    externalId: "LIN-120",
-    externalUrl: "https://linear.app/team/LIN-120",
-    provider: "linear",
-    title: "Overseerr restart loop",
-    status: "Done",
-    priority: "Medium",
-    incidentId: "inc-003",
-    createdAt: "2024-12-14T15:00:00Z",
-    lastSynced: "2024-12-14T18:00:00Z",
-  },
-];
 
 const statusIcons: Record<string, React.ReactNode> = {
   "In Progress": <Clock className="h-3 w-3" />,
@@ -82,20 +69,42 @@ const statusColors: Record<string, string> = {
 };
 
 const priorityColors: Record<string, string> = {
-  Urgent: "bg-red-500/10 text-red-500 border-red-500/20",
-  High: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-  Medium: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  Low: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  urgent: "bg-red-500/10 text-red-500 border-red-500/20",
+  high: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  medium: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+  low: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 };
 
 export default function TicketsPage() {
+  const [tickets, setTickets] = useState<TicketInfo[]>([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTicket, setNewTicket] = useState({ title: "", description: "", priority: "medium" });
 
-  const filteredTickets = mockTickets.filter((ticket) => {
+  const fetchTickets = async () => {
+    try {
+      const response = await fetch("/api/tickets");
+      const data = await response.json();
+      if (data.success) {
+        setTickets(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch tickets:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const filteredTickets = tickets.filter((ticket: TicketInfo) => {
     const matchesStatus =
-      statusFilter === "all" || ticket.status === statusFilter;
+      statusFilter === "all" || ticket.status.toLowerCase().includes(statusFilter.toLowerCase());
     const matchesProvider =
       providerFilter === "all" || ticket.provider === providerFilter;
     return matchesStatus && matchesProvider;
@@ -103,8 +112,26 @@ export default function TicketsPage() {
 
   const handleSync = async () => {
     setIsRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await fetchTickets();
     setIsRefreshing(false);
+  };
+
+  const handleCreateTicket = async () => {
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTicket),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTickets([data.data, ...tickets]);
+        setDialogOpen(false);
+        setNewTicket({ title: "", description: "", priority: "medium" });
+      }
+    } catch (error) {
+      console.error("Failed to create ticket:", error);
+    }
   };
 
   return (
@@ -116,12 +143,71 @@ export default function TicketsPage() {
             Track tickets created from incidents
           </p>
         </div>
-        <Button onClick={handleSync} disabled={isRefreshing}>
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Sync Status
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Ticket
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Ticket</DialogTitle>
+                <DialogDescription>
+                  Create a new ticket in Linear or locally
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={newTicket.title}
+                    onChange={(e) => setNewTicket({ ...newTicket, title: e.target.value })}
+                    placeholder="Ticket title"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={newTicket.description}
+                    onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
+                    placeholder="Describe the issue..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select
+                    value={newTicket.priority}
+                    onValueChange={(value) => setNewTicket({ ...newTicket, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateTicket} disabled={!newTicket.title}>Create</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline" onClick={handleSync} disabled={isRefreshing}>
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            Sync
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -132,7 +218,7 @@ export default function TicketsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{mockTickets.length}</div>
+            <div className="text-3xl font-bold">{tickets.length}</div>
           </CardContent>
         </Card>
         <Card className="bg-card/50">
@@ -143,7 +229,7 @@ export default function TicketsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-500">
-              {mockTickets.filter((t) => t.status !== "Done").length}
+              {tickets.filter((t: TicketInfo) => !t.status.toLowerCase().includes("done")).length}
             </div>
           </CardContent>
         </Card>
@@ -155,7 +241,7 @@ export default function TicketsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-500">
-              {mockTickets.filter((t) => t.status === "Done").length}
+              {tickets.filter((t: TicketInfo) => t.status.toLowerCase().includes("done")).length}
             </div>
           </CardContent>
         </Card>
@@ -248,7 +334,7 @@ export default function TicketsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {new Date(ticket.lastSynced).toLocaleString()}
+                      {new Date(ticket.updatedAt || ticket.createdAt).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" asChild>
