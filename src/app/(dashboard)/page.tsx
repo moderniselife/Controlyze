@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Container,
@@ -12,23 +12,68 @@ import {
   XCircle,
   RefreshCw,
   Clock,
+  Play,
+  Square,
+  RotateCcw,
+  Trash2,
+  Download,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { useContainersStore } from "@/stores/containers";
 
+interface DockerEvent {
+  type: string;
+  action: string;
+  actor: {
+    id: string;
+    name?: string;
+    attributes: Record<string, string>;
+  };
+  time: string;
+}
+
+const eventIcons: Record<string, React.ReactNode> = {
+  start: <Play className="h-3 w-3 text-green-500" />,
+  stop: <Square className="h-3 w-3 text-red-500" />,
+  die: <XCircle className="h-3 w-3 text-red-500" />,
+  kill: <XCircle className="h-3 w-3 text-red-500" />,
+  restart: <RotateCcw className="h-3 w-3 text-orange-500" />,
+  create: <CheckCircle2 className="h-3 w-3 text-blue-500" />,
+  destroy: <Trash2 className="h-3 w-3 text-gray-500" />,
+  pull: <Download className="h-3 w-3 text-blue-500" />,
+};
+
 export default function OverviewPage() {
   const { containers, stacks, isLoading, error, fetchContainers, fetchStacks } =
     useContainersStore();
+  const [events, setEvents] = useState<DockerEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch("/api/docker/events");
+      const data = await response.json();
+      if (data.success && data.data) {
+        setEvents(data.data.slice(0, 10));
+      }
+    } catch (err) {
+      console.error("Failed to fetch events:", err);
+    } finally {
+      setEventsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchContainers();
     fetchStacks();
+    fetchEvents();
 
     const interval = setInterval(() => {
       fetchContainers();
       fetchStacks();
+      fetchEvents();
     }, 10000);
 
     return () => clearInterval(interval);
@@ -264,10 +309,35 @@ export default function OverviewPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-              <Clock className="h-4 w-4 mr-2" />
-              Events will appear here
-            </div>
+            {eventsLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Loading events...
+              </div>
+            ) : events.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+                <Clock className="h-4 w-4 mr-2" />
+                No recent events
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {events.slice(0, 5).map((event, idx) => (
+                  <div
+                    key={`${event.actor.id}-${event.time}-${idx}`}
+                    className="flex items-center gap-2 p-2 rounded-lg bg-background/50 text-sm"
+                  >
+                    {eventIcons[event.action] || <Activity className="h-3 w-3" />}
+                    <span className="font-medium truncate max-w-[100px]">
+                      {event.actor.name || event.actor.id.slice(0, 12)}
+                    </span>
+                    <span className="text-muted-foreground">{event.action}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {new Date(event.time).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
