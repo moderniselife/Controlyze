@@ -50,9 +50,11 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch (error) {
-    // If auth check fails, allow through (fail open for now)
+    // If auth check fails, redirect to login (fail closed for security)
     console.error("Middleware auth check error:", error);
-    return NextResponse.next();
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 }
 

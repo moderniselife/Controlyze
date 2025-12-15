@@ -14,9 +14,13 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true });
 
+    // Clear cookie - use same secure setting as login
+    const isHttps = request.headers.get("x-forwarded-proto") === "https" ||
+                    request.url.startsWith("https://");
+
     response.cookies.set(SESSION_COOKIE, "", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
       sameSite: "lax",
       maxAge: 0,
       path: "/",

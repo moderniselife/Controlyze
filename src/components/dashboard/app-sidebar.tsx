@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import packageJson from "../../../package.json";
 import {
   LayoutDashboard,
@@ -16,7 +17,10 @@ import {
   Settings,
   Plug,
   Cog,
+  LogOut,
+  Loader2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -67,6 +71,21 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <Sidebar className="border-r border-border/40">
@@ -111,9 +130,25 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/40 px-6 py-4">
-        <div className="text-xs text-muted-foreground">
-          Controlyze v{packageJson.version}
+      <SidebarFooter className="border-t border-border/40 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            v{packageJson.version}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="h-8 px-2 text-muted-foreground hover:text-foreground"
+          >
+            {isLoggingOut ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
+            <span className="ml-2">Logout</span>
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
