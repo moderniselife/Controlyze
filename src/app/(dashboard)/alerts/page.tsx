@@ -77,6 +77,7 @@ interface AlertEvent {
 
 const conditionIcons: Record<string, React.ReactNode> = {
   health_status: <AlertTriangle className="h-4 w-4" />,
+  container_status: <Power className="h-4 w-4" />,
   restart_count: <RotateCcw className="h-4 w-4" />,
   resource_threshold: <MemoryStick className="h-4 w-4" />,
   log_pattern: <Activity className="h-4 w-4" />,
@@ -96,8 +97,12 @@ export default function AlertsPage() {
     conditionType: "health_status",
     severity: "warning",
     cooldownMinutes: 5,
+    dedupWindow: "5m",
+    // Container filter (applies to all condition types)
+    containerFilter: "",
     // Condition-specific fields
     healthStatus: "unhealthy",
+    containerState: "exited",
     duration: "30s",
     restartThreshold: 3,
     restartWindow: "5m",
@@ -183,7 +188,10 @@ export default function AlertsPage() {
     conditionType: "health_status",
     severity: "warning",
     cooldownMinutes: 5,
+    dedupWindow: "5m",
+    containerFilter: "",
     healthStatus: "unhealthy",
+    containerState: "exited",
     duration: "30s",
     restartThreshold: 3,
     restartWindow: "5m",
@@ -201,18 +209,26 @@ export default function AlertsPage() {
     try {
       let conditionConfig: Record<string, any> = {};
       
+      // Add container filter if specified
+      if (formData.containerFilter) {
+        conditionConfig.container = formData.containerFilter;
+      }
+      
       switch (formData.conditionType) {
         case "health_status":
-          conditionConfig = { status: formData.healthStatus, duration: formData.duration };
+          conditionConfig = { ...conditionConfig, status: formData.healthStatus, duration: formData.duration };
+          break;
+        case "container_status":
+          conditionConfig = { ...conditionConfig, status: formData.containerState };
           break;
         case "restart_count":
-          conditionConfig = { threshold: formData.restartThreshold, window: formData.restartWindow };
+          conditionConfig = { ...conditionConfig, threshold: formData.restartThreshold, window: formData.restartWindow };
           break;
         case "resource_threshold":
-          conditionConfig = { metric: formData.resourceMetric, threshold: formData.resourceThreshold, duration: formData.duration };
+          conditionConfig = { ...conditionConfig, metric: formData.resourceMetric, threshold: formData.resourceThreshold, duration: formData.duration };
           break;
         case "log_pattern":
-          conditionConfig = { pattern: formData.logPattern, excludePattern: formData.logExcludePattern || undefined };
+          conditionConfig = { ...conditionConfig, pattern: formData.logPattern, excludePattern: formData.logExcludePattern || undefined };
           break;
       }
 
@@ -262,7 +278,10 @@ export default function AlertsPage() {
       conditionType: alert.conditionType,
       severity: alert.severity,
       cooldownMinutes: alert.cooldownMinutes,
+      dedupWindow: config.dedupWindow || "5m",
+      containerFilter: config.container || "",
       healthStatus: config.status || "unhealthy",
+      containerState: config.status || "exited",
       duration: config.duration || "30s",
       restartThreshold: config.threshold || 3,
       restartWindow: config.window || "5m",
@@ -365,6 +384,7 @@ export default function AlertsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="health_status">Health Status</SelectItem>
+                      <SelectItem value="container_status">Container Status</SelectItem>
                       <SelectItem value="restart_count">Restart Count</SelectItem>
                       <SelectItem value="resource_threshold">Resource Threshold</SelectItem>
                       <SelectItem value="log_pattern">Log Pattern</SelectItem>
@@ -387,6 +407,19 @@ export default function AlertsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Container filter - applies to all condition types */}
+              <div className="space-y-2">
+                <Label>Container Filter (optional)</Label>
+                <Input
+                  value={formData.containerFilter}
+                  onChange={(e) => setFormData({ ...formData, containerFilter: e.target.value })}
+                  placeholder="e.g., plex, overseerr, flaresolverr*"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Target specific containers. Use * for wildcards. Leave empty for all containers.
+                </p>
               </div>
 
               {/* Condition-specific fields */}
@@ -416,6 +449,29 @@ export default function AlertsPage() {
                       placeholder="e.g., 30s, 1m, 5m"
                     />
                   </div>
+                </div>
+              )}
+
+              {formData.conditionType === "container_status" && (
+                <div className="space-y-2">
+                  <Label>Container State</Label>
+                  <Select
+                    value={formData.containerState}
+                    onValueChange={(value) => setFormData({ ...formData, containerState: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exited">Exited (stopped)</SelectItem>
+                      <SelectItem value="paused">Paused</SelectItem>
+                      <SelectItem value="restarting">Restarting</SelectItem>
+                      <SelectItem value="dead">Dead</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Alert when container enters this state
+                  </p>
                 </div>
               )}
 
@@ -506,6 +562,21 @@ export default function AlertsPage() {
                     value={formData.cooldownMinutes}
                     onChange={(e) => setFormData({ ...formData, cooldownMinutes: parseInt(e.target.value) || 5 })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Wait time before this alert can fire again
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dedupWindow">Dedup Window</Label>
+                  <Input
+                    id="dedupWindow"
+                    value={formData.dedupWindow}
+                    onChange={(e) => setFormData({ ...formData, dedupWindow: e.target.value })}
+                    placeholder="e.g., 5m, 10m, 1h"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Suppress duplicate alerts per container
+                  </p>
                 </div>
               </div>
 
