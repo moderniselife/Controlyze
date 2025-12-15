@@ -4,6 +4,9 @@ import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { Header } from "@/components/dashboard/header";
 import { isAuthenticated, isAuthEnabled } from "@/lib/auth";
 
+// Force dynamic rendering - auth check must happen on every request
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {
