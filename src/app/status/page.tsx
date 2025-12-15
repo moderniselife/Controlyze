@@ -40,6 +40,7 @@ interface StatusData {
     last24h: number;
     last7d: number;
     last30d: number;
+    trackingSince: string | null;
   };
 }
 
@@ -216,7 +217,7 @@ export default function PublicStatusPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-12">
+            <div className="grid grid-cols-3 gap-4 mb-4">
               {[
                 { label: "24h", value: status.uptime.last24h },
                 { label: "7 days", value: status.uptime.last7d },
@@ -234,12 +235,24 @@ export default function PublicStatusPage() {
                     Uptime ({period.label})
                   </div>
                   <div
-                    className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"
+                    className="absolute bottom-0 left-0 right-0 h-1 bg-linear-to-r from-emerald-500 to-emerald-400"
                     style={{ width: `${period.value}%` }}
                   />
                 </div>
               ))}
             </div>
+
+            {status.uptime.trackingSince && (
+              <p className="text-center text-xs text-zinc-600 mb-8">
+                Tracking since {new Date(status.uptime.trackingSince).toLocaleDateString([], { 
+                  year: "numeric", 
+                  month: "long", 
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </p>
+            )}
 
             <div className="space-y-8">
               {groupedServices &&

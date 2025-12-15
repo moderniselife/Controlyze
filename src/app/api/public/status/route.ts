@@ -3,8 +3,8 @@ import { listContainers } from "@/lib/docker/containers";
 import { getOverallUptime } from "@/lib/uptime/tracker";
 import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
-import { incidents } from "@/lib/db/schema";
-import { desc, gte } from "drizzle-orm";
+import { incidents, uptimeRecords } from "@/lib/db/schema";
+import { desc, gte, asc } from "drizzle-orm";
 
 export interface ContainerInfo {
   id: string;
@@ -32,6 +32,7 @@ export interface PublicStatusResponse {
     last24h: number;
     last7d: number;
     last30d: number;
+    trackingSince: string | null;
   };
 }
 
@@ -248,6 +249,17 @@ export async function GET() {
       resolvedAt: inc.resolvedAt?.toISOString(),
     }));
 
+    // Get earliest uptime record to show "tracking since"
+    const earliestRecord = await db
+      .select({ checkedAt: uptimeRecords.checkedAt })
+      .from(uptimeRecords)
+      .orderBy(asc(uptimeRecords.checkedAt))
+      .limit(1);
+    
+    const trackingSince = earliestRecord.length > 0 
+      ? earliestRecord[0].checkedAt.toISOString() 
+      : null;
+
     const response: PublicStatusResponse = {
       overall: getOverallStatus(services, serviceConfigs),
       lastUpdated: new Date().toISOString(),
@@ -257,6 +269,7 @@ export async function GET() {
         last24h: uptime24h,
         last7d: uptime7d,
         last30d: uptime30d,
+        trackingSince,
       },
     };
 
