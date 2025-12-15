@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { loadConfig } from "@/lib/config";
+import { loadRawConfig } from "@/lib/config";
 import { cookies } from "next/headers";
 
 const SESSION_COOKIE = "controlyze_session";
@@ -27,21 +27,26 @@ function generateSessionId(): string {
 
 export function isAuthEnabled(): boolean {
   try {
-    const config = loadConfig();
+    const config = loadRawConfig();
+    console.log("Auth: isAuthEnabled check, auth.enabled =", config.auth?.enabled);
     return config.auth?.enabled === true;
-  } catch {
+  } catch (e) {
+    console.error("Auth: isAuthEnabled error:", e);
     return false;
   }
 }
 
 export function getUsers(): User[] {
   try {
-    const config = loadConfig();
+    const config = loadRawConfig();
+    console.log("Auth: getUsers check, provider =", config.auth?.provider);
+    console.log("Auth: local users count =", config.auth?.local?.users?.length || 0);
     if (!config.auth?.enabled || config.auth.provider !== "local") {
       return [];
     }
     return config.auth.local?.users || [];
-  } catch {
+  } catch (e) {
+    console.error("Auth: getUsers error:", e);
     return [];
   }
 }
