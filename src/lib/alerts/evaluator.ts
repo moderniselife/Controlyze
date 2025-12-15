@@ -277,19 +277,28 @@ async function evaluateCondition(
     }
     
     case "log_pattern": {
-      const pattern = conditionConfig.pattern;
-      const excludePattern = conditionConfig.excludePattern;
+      let pattern = conditionConfig.pattern;
+      let excludePattern = conditionConfig.excludePattern;
       
       if (!pattern) {
         return { triggered: false, message: "" };
+      }
+      
+      // Strip (?i) inline flag - JS doesn't support it, we add 'i' flag instead
+      const hasInlineIgnoreCase = pattern.includes("(?i)");
+      pattern = pattern.replace(/\(\?i\)/g, "");
+      if (excludePattern) {
+        excludePattern = excludePattern.replace(/\(\?i\)/g, "");
       }
       
       try {
         // Get recent logs (last 100 lines, last 5 minutes)
         const logs = await getContainerLogs(container.id, { tail: 100, since: Math.floor(Date.now() / 1000) - 300 });
         
-        const regex = new RegExp(pattern, "gm");
-        const excludeRegex = excludePattern ? new RegExp(excludePattern, "gm") : null;
+        // Always use case-insensitive matching for log patterns
+        const flags = hasInlineIgnoreCase ? "gmi" : "gmi";
+        const regex = new RegExp(pattern, flags);
+        const excludeRegex = excludePattern ? new RegExp(excludePattern, flags) : null;
         
         const matches = logs.match(regex);
         if (matches && matches.length > 0) {
