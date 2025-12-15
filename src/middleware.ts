@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "controlyze_session";
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ["/login", "/status", "/api/public", "/api/auth/login"];
+const PUBLIC_ROUTES = ["/login", "/status", "/api/public", "/api/auth/login", "/api/auth/check"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
