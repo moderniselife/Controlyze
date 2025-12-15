@@ -5,6 +5,7 @@ import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
 import { incidents, uptimeRecords } from "@/lib/db/schema";
 import { desc, gte, asc } from "drizzle-orm";
+import { recordUptime, determineServiceStatus } from "@/lib/uptime/recorder";
 
 export interface ContainerInfo {
   id: string;
@@ -243,6 +244,19 @@ export async function GET() {
         a.displayName.localeCompare(b.displayName)
       );
     });
+
+    // Record uptime for each service (throttled to once per minute via database check)
+    try {
+      const uptimeChecks = services.map((svc) => ({
+        serviceName: svc.name,
+        status: determineServiceStatus(
+          svc.containers.map((c) => ({ state: c.state, healthStatus: c.healthStatus }))
+        ),
+      }));
+      await recordUptime(uptimeChecks);
+    } catch (err) {
+      console.error("Failed to record uptime:", err);
+    }
 
     // Fetch real uptime data
     const [uptime24h, uptime7d, uptime30d] = await Promise.all([

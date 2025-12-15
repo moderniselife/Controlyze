@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertTriangle, XCircle, Clock, Zap, ChevronDown, ChevronUp, Box } from "lucide-react";
 import Image from "next/image";
+import { UptimeGraph } from "@/components/status/UptimeGraph";
 
 interface ContainerInfo {
   id: string;
@@ -390,6 +391,9 @@ export default function PublicStatusPage() {
                   </div>
                 ))}
             </div>
+
+            {/* Uptime History Graph */}
+            <UptimeGraph className="mt-8" />
 
             {status.incidents.length > 0 && (
               <div className="mt-12">
