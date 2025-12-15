@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM node:20-bookworm-slim AS base
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -17,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,target=/app/.next/cache \
     npm run build -- --webpack
 
 # Production image
