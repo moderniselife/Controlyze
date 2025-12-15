@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings,
   Save,
@@ -8,6 +8,11 @@ import {
   Upload,
   RefreshCw,
   Check,
+  Shield,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,8 +30,113 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
+interface AuthUser {
+  username: string;
+  passwordHash?: string;
+}
+
+interface AuthConfig {
+  enabled: boolean;
+  provider: string;
+  users: AuthUser[];
+}
+
 export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
+  const [authConfig, setAuthConfig] = useState<AuthConfig>({
+    enabled: false,
+    provider: "local",
+    users: [],
+  });
+  const [newUser, setNewUser] = useState({ username: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAuthConfig();
+  }, []);
+
+  const fetchAuthConfig = async () => {
+    try {
+      const response = await fetch("/api/config/auth");
+      const data = await response.json();
+      if (data.success) {
+        setAuthConfig(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch auth config:", error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSaveAuth = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/config/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authConfig),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Authentication settings saved");
+      } else {
+        toast.error(data.error || "Failed to save auth settings");
+      }
+    } catch (error) {
+      toast.error("Failed to save auth settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUser.username || !newUser.password) {
+      toast.error("Username and password required");
+      return;
+    }
+    try {
+      const response = await fetch("/api/config/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAuthConfig((prev) => ({
+          ...prev,
+          users: [...prev.users, { username: newUser.username }],
+        }));
+        setNewUser({ username: "", password: "" });
+        toast.success("User added");
+      } else {
+        toast.error(data.error || "Failed to add user");
+      }
+    } catch (error) {
+      toast.error("Failed to add user");
+    }
+  };
+
+  const handleDeleteUser = async (username: string) => {
+    try {
+      const response = await fetch(`/api/config/auth/users/${encodeURIComponent(username)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAuthConfig((prev) => ({
+          ...prev,
+          users: prev.users.filter((u) => u.username !== username),
+        }));
+        toast.success("User deleted");
+      } else {
+        toast.error(data.error || "Failed to delete user");
+      }
+    } catch (error) {
+      toast.error("Failed to delete user");
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -67,6 +177,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="general" className="space-y-6">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="docker">Docker</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -140,6 +251,129 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="auth" className="space-y-6">
+          <Card className="bg-card/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Authentication
+              </CardTitle>
+              <CardDescription>
+                Control access to Controlyze with user authentication
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Enable Authentication</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Require login to access Controlyze
+                  </p>
+                </div>
+                <Switch
+                  checked={authConfig.enabled}
+                  onCheckedChange={(checked) =>
+                    setAuthConfig((prev) => ({ ...prev, enabled: checked }))
+                  }
+                />
+              </div>
+              {authConfig.enabled && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label>Users</Label>
+                      <span className="text-sm text-muted-foreground">
+                        {authConfig.users.length} user(s)
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {authConfig.users.map((user) => (
+                        <div
+                          key={user.username}
+                          className="flex items-center justify-between p-3 rounded-lg bg-background/50"
+                        >
+                          <span className="font-mono">{user.username}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.username)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      ))}
+                      {authConfig.users.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No users configured. Add a user below.
+                        </p>
+                      )}
+                    </div>
+                    <Separator />
+                    <div className="space-y-3">
+                      <Label>Add New User</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Username"
+                          value={newUser.username}
+                          onChange={(e) =>
+                            setNewUser((prev) => ({ ...prev, username: e.target.value }))
+                          }
+                        />
+                        <div className="relative flex-1">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Password"
+                            value={newUser.password}
+                            onChange={(e) =>
+                              setNewUser((prev) => ({ ...prev, password: e.target.value }))
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                        <Button onClick={handleAddUser}>
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <Separator />
+                  <Button onClick={handleSaveAuth} disabled={isSaving} className="w-full">
+                    {isSaving ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Authentication Settings
+                  </Button>
+                </>
+              )}
+              {!authConfig.enabled && (
+                <Button onClick={handleSaveAuth} disabled={isSaving} className="w-full">
+                  {isSaving ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save Authentication Settings
+                </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
