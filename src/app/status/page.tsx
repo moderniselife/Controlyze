@@ -169,13 +169,16 @@ export default function PublicStatusPage() {
       <div className="relative max-w-4xl mx-auto px-6 py-12">
         <header className="text-center mb-12">
           <div className="inline-flex items-center justify-center mb-6">
-            <Image
-              src="/logo.png"
-              alt="Logo"
-              width={64}
-              height={64}
-              className="rounded-xl"
-            />
+            <div className="relative">
+              <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-2xl scale-150" />
+              <Image
+                src="/logo.png"
+                alt="Logo"
+                width={64}
+                height={64}
+                className="relative rounded-xl drop-shadow-2xl"
+              />
+            </div>
           </div>
 
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6">
