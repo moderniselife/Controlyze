@@ -79,22 +79,27 @@ export async function createSession(username: string): Promise<string> {
   const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
 
   sessions.set(sessionId, { username, expiresAt });
+  console.log(`[Auth] Session created: ${sessionId.substring(0, 8)}... for user ${username}, total sessions: ${sessions.size}`);
 
   return sessionId;
 }
 
 export async function validateSession(sessionId: string): Promise<string | null> {
+  console.log(`[Auth] Validating session: ${sessionId.substring(0, 8)}..., total sessions in memory: ${sessions.size}`);
   const session = sessions.get(sessionId);
 
   if (!session) {
+    console.log(`[Auth] Session not found in memory`);
     return null;
   }
 
   if (Date.now() > session.expiresAt) {
+    console.log(`[Auth] Session expired`);
     sessions.delete(sessionId);
     return null;
   }
 
+  console.log(`[Auth] Session valid for user: ${session.username}`);
   return session.username;
 }
 

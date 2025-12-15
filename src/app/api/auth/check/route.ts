@@ -16,8 +16,10 @@ export async function GET(request: NextRequest) {
 
     // Read cookie directly from request (works with middleware fetch)
     const sessionId = request.cookies.get(SESSION_COOKIE)?.value;
+    console.log(`[Auth Check] Session cookie present: ${!!sessionId}, value: ${sessionId?.substring(0, 8) || 'none'}...`);
     
     if (!sessionId) {
+      console.log(`[Auth Check] No session cookie found`);
       return NextResponse.json({
         authEnabled: true,
         authenticated: false,
@@ -25,6 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const username = await validateSession(sessionId);
+    console.log(`[Auth Check] Validation result: ${username || 'null'}`);
     const authenticated = username !== null;
 
     return NextResponse.json({
