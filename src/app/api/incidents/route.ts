@@ -19,6 +19,12 @@ export async function GET() {
       success: true,
       data: formatted,
       timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     });
   } catch (error) {
     console.error("Error fetching incidents:", error);

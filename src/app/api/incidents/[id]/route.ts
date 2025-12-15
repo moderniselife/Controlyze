@@ -29,6 +29,12 @@ export async function GET(
       success: true,
       data: formatted,
       timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     });
   } catch (error) {
     console.error("Error fetching incident:", error);
@@ -83,6 +89,12 @@ export async function PUT(
         logExcerpts: updated[0].logExcerpts ? JSON.parse(updated[0].logExcerpts) : [],
       },
       timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     });
   } catch (error) {
     console.error("Error updating incident:", error);
