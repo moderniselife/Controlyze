@@ -30,6 +30,23 @@ interface Container {
   memoryPercent?: number;
 }
 
+interface IncidentContext {
+  triggerType: string;
+  triggerValue?: string | number;
+  threshold?: string | number;
+  logs?: string;
+  metrics?: {
+    cpu?: number;
+    memory?: number;
+    memoryUsed?: number;
+    memoryLimit?: number;
+  };
+  containerState?: string;
+  healthStatus?: string;
+  restartCount?: number;
+  timestamp: string;
+}
+
 interface EvaluationResult {
   alertId: string;
   alertName: string;
@@ -38,6 +55,7 @@ interface EvaluationResult {
   containerName?: string;
   message: string;
   severity: string;
+  context?: IncidentContext;
 }
 
 // Cooldown cache: alertId -> timestamp
@@ -165,7 +183,7 @@ async function evaluateCondition(
   conditionConfig: Record<string, any>,
   container: Container,
   alertId: string
-): Promise<{ triggered: boolean; message: string }> {
+): Promise<{ triggered: boolean; message: string; context?: IncidentContext }> {
   const durationKey = `${alertId}:${container.id}`;
   const requiredDurationMs = parseDuration(conditionConfig.duration);
   
@@ -188,6 +206,13 @@ async function evaluateCondition(
         return {
           triggered: true,
           message: `Container ${container.name} is ${targetStatus}`,
+          context: {
+            triggerType: "health_status",
+            triggerValue: targetStatus,
+            containerState: container.state,
+            healthStatus: container.healthStatus,
+            timestamp: new Date().toISOString(),
+          },
         };
       } else {
         durationCache.delete(durationKey); // Condition cleared, reset duration
@@ -221,6 +246,14 @@ async function evaluateCondition(
         return {
           triggered: true,
           message: `Container ${container.name} has restarted ${restartsInWindow} times in the last ${conditionConfig.window || "5m"} (threshold: ${threshold})`,
+          context: {
+            triggerType: "restart_count",
+            triggerValue: restartsInWindow,
+            threshold,
+            containerState: container.state,
+            restartCount: currentRestarts,
+            timestamp: new Date().toISOString(),
+          },
         };
       }
       break;
@@ -237,6 +270,13 @@ async function evaluateCondition(
         return {
           triggered: true,
           message: `Container ${container.name} is not running (state: ${container.state})`,
+          context: {
+            triggerType: "container_status",
+            triggerValue: container.state,
+            containerState: container.state,
+            healthStatus: container.healthStatus,
+            timestamp: new Date().toISOString(),
+          },
         };
       }
       break;
@@ -266,9 +306,29 @@ async function evaluateCondition(
           }
         }
         durationCache.delete(durationKey);
+        
+        // Get full stats for context
+        let stats: any = {};
+        try {
+          stats = await getContainerStats(container.id);
+        } catch (e) { /* ignore */ }
+        
         return {
           triggered: true,
           message: `Container ${container.name} ${metric.replace("_", " ")} at ${currentValue.toFixed(1)}% (threshold: ${threshold}%)`,
+          context: {
+            triggerType: "resource_threshold",
+            triggerValue: currentValue,
+            threshold,
+            metrics: {
+              cpu: stats.cpuPercent || container.cpuPercent,
+              memory: stats.memoryPercent || container.memoryPercent,
+              memoryUsed: stats.memoryUsage,
+              memoryLimit: stats.memoryLimit,
+            },
+            containerState: container.state,
+            timestamp: new Date().toISOString(),
+          },
         };
       } else {
         durationCache.delete(durationKey);
@@ -303,16 +363,37 @@ async function evaluateCondition(
         const matches = logs.match(regex);
         if (matches && matches.length > 0) {
           // Check exclude pattern
+          let finalMatches: string[] = [...matches];
           if (excludeRegex) {
-            const filteredMatches = matches.filter(m => !excludeRegex.test(m));
-            if (filteredMatches.length === 0) {
+            finalMatches = finalMatches.filter(m => !excludeRegex.test(m));
+            if (finalMatches.length === 0) {
               return { triggered: false, message: "" };
+            }
+          }
+          
+          // Extract log lines around matches for context (first 10 matches, with surrounding context)
+          const logLines = logs.split("\n");
+          const matchedLines: string[] = [];
+          for (const match of finalMatches.slice(0, 10)) {
+            const lineIndex = logLines.findIndex(l => l.includes(match));
+            if (lineIndex >= 0) {
+              // Get 1 line before and after for context
+              const start = Math.max(0, lineIndex - 1);
+              const end = Math.min(logLines.length, lineIndex + 2);
+              matchedLines.push(...logLines.slice(start, end));
             }
           }
           
           return {
             triggered: true,
-            message: `Container ${container.name} logs matched pattern "${pattern}" (${matches.length} matches)`,
+            message: `Container ${container.name} logs matched pattern "${pattern}" (${finalMatches.length} matches)`,
+            context: {
+              triggerType: "log_pattern",
+              triggerValue: pattern,
+              logs: matchedLines.slice(0, 50).join("\n"), // Limit to 50 lines
+              containerState: container.state,
+              timestamp: new Date().toISOString(),
+            },
           };
         }
       } catch (error) {
@@ -395,7 +476,7 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
         }
       }
 
-      const { triggered, message } = await evaluateCondition(
+      const { triggered, message, context } = await evaluateCondition(
         alert.conditionType,
         alert.conditionConfig,
         container,
@@ -411,6 +492,7 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
           containerName: container.name,
           message,
           severity: alert.severity,
+          context,
         });
 
         // Update cooldown and dedup cache
@@ -432,13 +514,51 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
         // Create incident if routing.createIncident is true
         if (alert.routing?.createIncident !== false) {
           const incidentId = nanoid();
+          
+          // Build detailed description with context
+          let detailedDescription = message;
+          if (context) {
+            detailedDescription += `\n\n**Trigger Details:**`;
+            detailedDescription += `\n- Type: ${context.triggerType}`;
+            if (context.triggerValue !== undefined) {
+              detailedDescription += `\n- Value: ${context.triggerValue}`;
+            }
+            if (context.threshold !== undefined) {
+              detailedDescription += `\n- Threshold: ${context.threshold}`;
+            }
+            if (context.metrics) {
+              detailedDescription += `\n\n**Resource Metrics:**`;
+              if (context.metrics.cpu !== undefined) {
+                detailedDescription += `\n- CPU: ${context.metrics.cpu?.toFixed(1)}%`;
+              }
+              if (context.metrics.memory !== undefined) {
+                detailedDescription += `\n- Memory: ${context.metrics.memory?.toFixed(1)}%`;
+              }
+              if (context.metrics.memoryUsed && context.metrics.memoryLimit) {
+                const usedMB = Math.round(context.metrics.memoryUsed / 1024 / 1024);
+                const limitMB = Math.round(context.metrics.memoryLimit / 1024 / 1024);
+                detailedDescription += `\n- Memory Used: ${usedMB}MB / ${limitMB}MB`;
+              }
+            }
+            detailedDescription += `\n\n**Container State:** ${context.containerState || 'unknown'}`;
+            if (context.healthStatus) {
+              detailedDescription += `\n**Health Status:** ${context.healthStatus}`;
+            }
+            if (context.restartCount !== undefined) {
+              detailedDescription += `\n**Restart Count:** ${context.restartCount}`;
+            }
+          }
+          
           await db.insert(incidents).values({
             id: incidentId,
             title: `Alert: ${alert.name}`,
-            description: message,
+            description: detailedDescription,
             severity: alert.severity === "critical" ? "critical" : alert.severity === "warning" ? "medium" : "low",
-            status: "open",
+            status: "investigating",
             affectedContainers: JSON.stringify([container.id]),
+            affectedServices: JSON.stringify([container.name]),
+            logExcerpts: context?.logs || null,
+            isPublic: true,
             createdAt: new Date(),
             updatedAt: new Date(),
           });

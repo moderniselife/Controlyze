@@ -36,6 +36,7 @@ interface PublicIncident {
   status: "open" | "investigating" | "identified" | "monitoring" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
   affectedServices?: string[];
+  logExcerpts?: string;
   updates: PublicIncidentUpdate[];
   createdAt: string;
   updatedAt: string;
@@ -466,6 +467,16 @@ export default function PublicStatusPage() {
                           {new Date(incident.createdAt).toLocaleDateString()}
                         </span>
                       </div>
+
+                      {/* Log excerpts if available */}
+                      {incident.logExcerpts && (
+                        <div className="mt-4 border-t border-white/10 pt-4">
+                          <p className="text-xs font-medium text-zinc-400 mb-2">Related Logs:</p>
+                          <pre className="text-xs text-zinc-500 bg-black/30 rounded-lg p-3 overflow-x-auto max-h-32 overflow-y-auto font-mono">
+                            {incident.logExcerpts}
+                          </pre>
+                        </div>
+                      )}
 
                       {/* Timeline of updates */}
                       {incident.updates && incident.updates.length > 0 && (
