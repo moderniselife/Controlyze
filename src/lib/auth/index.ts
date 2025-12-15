@@ -118,6 +118,7 @@ export async function cleanupExpiredSessions(): Promise<void> {
 export async function getSessionFromCookies(): Promise<string | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE);
+  console.log(`[Auth] getSessionFromCookies: cookie present = ${!!sessionCookie}, value = ${sessionCookie?.value?.substring(0, 8) || 'none'}...`);
   return sessionCookie?.value || null;
 }
 

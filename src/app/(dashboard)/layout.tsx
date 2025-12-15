@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { Header } from "@/components/dashboard/header";
-import { isAuthenticated, isAuthEnabled } from "@/lib/auth";
 
-// Force dynamic rendering - auth check must happen on every request
+// Force dynamic rendering - middleware handles auth
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({
@@ -12,14 +10,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const authEnabled = isAuthEnabled();
-
-  if (authEnabled) {
-    const authenticated = await isAuthenticated();
-    if (!authenticated) {
-      redirect("/login");
-    }
-  }
+  // Auth is handled by middleware - no need to check here
 
   return (
     <SidebarProvider>
