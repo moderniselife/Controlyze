@@ -305,6 +305,23 @@ Controlyze has built-in support for media server stacks like SchroStack. When de
 - **Smart Defaults** - Predefined alert rules and impact levels
 - **Quick Actions** - Restart services, view logs, check health
 
+### Deploy SchroStack
+
+Want to deploy the entire media server stack? Use the included `docker-SchroStack.example.yml`:
+
+```bash
+# Copy and customize the example
+cp docker-SchroStack.example.yml docker-SchroStack.yml
+
+# Edit with your settings (API keys, paths, timezone, etc.)
+nano docker-SchroStack.yml
+
+# Deploy the stack
+docker compose -f docker-SchroStack.yml up -d
+```
+
+The stack includes: **Plex/Jellyfin**, **Overseerr**, **Prowlarr**, **Jackett**, **FlareSolverr pool**, **Tunarr**, **Tautulli**, **SchroDrive**, **pd_zurg**, **Cloudflare Tunnel**, **Gluetun VPN**, and **Controlyze** itself.
+
 ## 🛠️ Development
 
 ```bash
