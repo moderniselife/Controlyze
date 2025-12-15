@@ -222,7 +222,19 @@ export default function SettingsPage() {
       });
       const data = await response.json();
       if (data.success) {
-        toast.success("Status page settings saved");
+        // Check if domain was changed - requires restart
+        if (statusConfig.domain) {
+          toast.success("Status page settings saved", {
+            description: "Domain changes require a container restart to take effect.",
+            action: {
+              label: "Restart Now",
+              onClick: () => handleRestartContainer(),
+            },
+            duration: 10000,
+          });
+        } else {
+          toast.success("Status page settings saved");
+        }
       } else {
         toast.error(data.error || "Failed to save status settings");
       }
@@ -230,6 +242,24 @@ export default function SettingsPage() {
       toast.error("Failed to save status settings");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRestartContainer = async () => {
+    try {
+      const response = await fetch("/api/system/restart", { method: "POST" });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Restarting Controlyze...", {
+          description: "The page will reload automatically.",
+        });
+        // Wait a bit then reload
+        setTimeout(() => window.location.reload(), 3000);
+      } else {
+        toast.error(data.error || "Failed to restart");
+      }
+    } catch (error) {
+      toast.error("Failed to restart container");
     }
   };
 

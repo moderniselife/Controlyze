@@ -24,7 +24,7 @@ interface PublicServiceStatus {
 interface PublicIncident {
   id: string;
   title: string;
-  status: "investigating" | "identified" | "monitoring" | "resolved";
+  status: "open" | "investigating" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
   createdAt: string;
   updatedAt: string;
@@ -387,10 +387,10 @@ export default function PublicStatusPage() {
                           </p>
                         </div>
                         <span
-                          className={`text-xs px-2 py-1 rounded-full ${
+                          className={`text-xs px-2 py-1 rounded-full capitalize ${
                             incident.status === "resolved"
                               ? "bg-emerald-500/10 text-emerald-400"
-                              : incident.status === "monitoring"
+                              : incident.status === "mitigated"
                               ? "bg-blue-500/10 text-blue-400"
                               : "bg-amber-500/10 text-amber-400"
                           }`}

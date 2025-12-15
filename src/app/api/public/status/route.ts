@@ -39,7 +39,7 @@ export interface PublicStatusResponse {
 export interface PublicIncident {
   id: string;
   title: string;
-  status: "investigating" | "identified" | "monitoring" | "resolved";
+  status: "open" | "investigating" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
   createdAt: string;
   updatedAt: string;
@@ -254,7 +254,7 @@ export async function GET() {
     const publicIncidents: PublicIncident[] = recentIncidents.map((inc) => ({
       id: inc.id,
       title: inc.title,
-      status: inc.status === "resolved" ? "resolved" : inc.status === "mitigated" ? "monitoring" : "investigating",
+      status: inc.status === "resolved" ? "resolved" : inc.status === "mitigated" ? "mitigated" : inc.status === "investigating" ? "investigating" : "open",
       severity: inc.severity === "critical" ? "critical" : inc.severity === "high" ? "major" : "minor",
       createdAt: inc.createdAt.toISOString(),
       updatedAt: inc.updatedAt.toISOString(),
