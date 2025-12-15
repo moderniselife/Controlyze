@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -9,9 +9,14 @@ import {
   MessageSquare,
   ExternalLink,
   Filter,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -19,64 +24,115 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { IncidentStatusBadge, SeverityBadge } from "@/components/dashboard/status-badge";
+import { toast } from "sonner";
 
 interface Incident {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   status: "open" | "investigating" | "mitigated" | "resolved";
   severity: "info" | "warning" | "critical";
-  affectedServices: string[];
-  createdAt: string;
-  updatedAt: string;
-  ticketId?: string;
-  ticketUrl?: string;
+  affectedContainers: string[];
+  affectedStacks: string[];
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const mockIncidents: Incident[] = [
-  {
-    id: "inc-001",
-    title: "Plex container unhealthy",
-    description: "Plex media server is reporting unhealthy status due to transcoder issues",
-    status: "investigating",
-    severity: "warning",
-    affectedServices: ["plex", "tunarr"],
-    createdAt: "2024-12-15T10:30:00Z",
-    updatedAt: "2024-12-15T10:45:00Z",
-    ticketId: "LIN-123",
-    ticketUrl: "https://linear.app/team/LIN-123",
-  },
-  {
-    id: "inc-002",
-    title: "High memory usage on prowlarr",
-    description: "Prowlarr indexer is consuming excessive memory",
-    status: "open",
-    severity: "critical",
-    affectedServices: ["prowlarr"],
-    createdAt: "2024-12-15T09:00:00Z",
-    updatedAt: "2024-12-15T09:00:00Z",
-  },
-  {
-    id: "inc-003",
-    title: "Overseerr restart loop",
-    description: "Overseerr restarted 5 times in the last hour",
-    status: "resolved",
-    severity: "warning",
-    affectedServices: ["overseerr"],
-    createdAt: "2024-12-14T15:00:00Z",
-    updatedAt: "2024-12-14T16:30:00Z",
-    ticketId: "LIN-120",
-    ticketUrl: "https://linear.app/team/LIN-120",
-  },
-];
-
 export default function IncidentsPage() {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    severity: "warning",
+    affectedContainers: "",
+  });
 
-  const filteredIncidents = mockIncidents.filter((incident) => {
+  useEffect(() => {
+    fetchIncidents();
+  }, []);
+
+  const fetchIncidents = async () => {
+    try {
+      const response = await fetch("/api/incidents");
+      const data = await response.json();
+      if (data.success) {
+        setIncidents(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch incidents:", error);
+      toast.error("Failed to load incidents");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setIsSaving(true);
+    try {
+      const payload = {
+        title: formData.title,
+        description: formData.description || null,
+        severity: formData.severity,
+        status: "open",
+        affectedContainers: formData.affectedContainers ? formData.affectedContainers.split(",").map(s => s.trim()) : [],
+      };
+
+      const response = await fetch("/api/incidents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Incident created");
+        setDialogOpen(false);
+        setFormData({ title: "", description: "", severity: "warning", affectedContainers: "" });
+        fetchIncidents();
+      } else {
+        toast.error(data.error || "Failed to create incident");
+      }
+    } catch {
+      toast.error("Failed to create incident");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateStatus = async (id: string, status: string) => {
+    try {
+      const response = await fetch(`/api/incidents/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success(`Status updated to ${status}`);
+        fetchIncidents();
+      }
+    } catch {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const filteredIncidents = incidents.filter((incident) => {
     const matchesStatus =
       statusFilter === "all" || incident.status === statusFilter;
     const matchesSeverity =
@@ -84,7 +140,7 @@ export default function IncidentsPage() {
     return matchesStatus && matchesSeverity;
   });
 
-  const openIncidents = mockIncidents.filter(
+  const openIncidents = incidents.filter(
     (i) => i.status === "open" || i.status === "investigating"
   ).length;
 
@@ -97,10 +153,71 @@ export default function IncidentsPage() {
             Track and manage service incidents
           </p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          New Incident
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              New Incident
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Incident</DialogTitle>
+              <DialogDescription>
+                Log a new incident to track and resolve
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Incident title"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Describe the incident"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Severity</Label>
+                <Select
+                  value={formData.severity}
+                  onValueChange={(value) => setFormData({ ...formData, severity: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="affected">Affected Containers (comma-separated)</Label>
+                <Input
+                  id="affected"
+                  value={formData.affectedContainers}
+                  onChange={(e) => setFormData({ ...formData, affectedContainers: e.target.value })}
+                  placeholder="plex, overseerr"
+                />
+              </div>
+              <Button className="w-full" onClick={handleSubmit} disabled={isSaving || !formData.title}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Create Incident
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -122,7 +239,7 @@ export default function IncidentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-500">
-              {mockIncidents.filter((i) => i.severity === "critical").length}
+              {incidents.filter((i) => i.severity === "critical").length}
             </div>
           </CardContent>
         </Card>
@@ -134,7 +251,7 @@ export default function IncidentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-500">
-              {mockIncidents.filter((i) => i.status === "investigating").length}
+              {incidents.filter((i) => i.status === "investigating").length}
             </div>
           </CardContent>
         </Card>
@@ -146,7 +263,7 @@ export default function IncidentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-500">
-              {mockIncidents.filter((i) => i.status === "resolved").length}
+              {incidents.filter((i) => i.status === "resolved").length}
             </div>
           </CardContent>
         </Card>
@@ -229,31 +346,28 @@ export default function IncidentsPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {incident.affectedServices.map((service) => (
-                      <Badge key={service} variant="secondary" className="text-xs">
-                        {service}
+                    {incident.affectedContainers.map((container: string) => (
+                      <Badge key={container} variant="secondary" className="text-xs">
+                        {container}
                       </Badge>
                     ))}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {incident.ticketId && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a
-                        href={incident.ticketUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        {incident.ticketId}
-                      </a>
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm">
-                    <MessageSquare className="h-3 w-3 mr-1" />
-                    Notes
-                  </Button>
-                  <Button size="sm">View Details</Button>
+                  <Select
+                    value={incident.status}
+                    onValueChange={(value) => updateStatus(incident.id, value)}
+                  >
+                    <SelectTrigger className="h-8 w-[130px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="investigating">Investigating</SelectItem>
+                      <SelectItem value="mitigated">Mitigated</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
