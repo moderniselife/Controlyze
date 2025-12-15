@@ -5,7 +5,22 @@ RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
+    ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Hard-disable any proxy env/config that can break node-gyp header downloads in CI
+ENV HTTP_PROXY=
+ENV HTTPS_PROXY=
+ENV ALL_PROXY=
+ENV NO_PROXY=
+ENV http_proxy=
+ENV https_proxy=
+ENV all_proxy=
+ENV no_proxy=
+ENV npm_config_proxy=
+ENV npm_config_https_proxy=
+ENV npm_config_noproxy=
 
 # Install dependencies only when needed
 FROM base AS deps
