@@ -26,18 +26,26 @@ interface UptimeGraphProps {
 export function UptimeGraph({ className = "" }: UptimeGraphProps) {
   const [data, setData] = useState<UptimeData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(90);
 
   useEffect(() => {
     async function fetchUptime() {
+      setError(null);
       try {
         const res = await fetch(`/api/public/uptime?days=${days}`);
-        const json = await res.json();
-        if (json.success) {
-          setData(json.data);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
         }
-      } catch (error) {
-        console.error("Failed to fetch uptime:", error);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setData(json.data);
+        } else {
+          setError(json.error || "Failed to load uptime data");
+        }
+      } catch (err) {
+        console.error("Failed to fetch uptime:", err);
+        setError("Failed to connect to uptime API");
       } finally {
         setIsLoading(false);
       }
@@ -56,7 +64,19 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
     );
   }
 
-  if (!data || data.dailyUptime.length === 0) {
+  if (error) {
+    return (
+      <div className={`rounded-2xl bg-white/5 border border-white/10 p-6 ${className}`}>
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp className="h-5 w-5 text-red-400" />
+          <h3 className="text-lg font-semibold text-white">Uptime History</h3>
+        </div>
+        <p className="text-red-400 text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (!data || !data.dailyUptime || data.dailyUptime.length === 0) {
     return (
       <div className={`rounded-2xl bg-white/5 border border-white/10 p-6 ${className}`}>
         <div className="flex items-center gap-2 mb-4">
