@@ -33,7 +33,9 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
     async function fetchUptime() {
       setError(null);
       try {
-        const res = await fetch(`/api/public/uptime?days=${days}`);
+        const res = await fetch(`/api/public/uptime?days=${days}`, {
+          cache: 'no-store',
+        });
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }

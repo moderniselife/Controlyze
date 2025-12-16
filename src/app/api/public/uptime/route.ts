@@ -3,6 +3,10 @@ import { db } from "@/lib/db";
 import { uptimeRecords } from "@/lib/db/schema";
 import { desc, gte, eq, and, sql } from "drizzle-orm";
 
+// Disable Next.js caching for this route
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // GET uptime history for status page
 export async function GET(request: Request) {
   try {
