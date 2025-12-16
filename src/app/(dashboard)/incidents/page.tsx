@@ -11,6 +11,9 @@ import {
   Filter,
   RefreshCw,
   Loader2,
+  CheckSquare,
+  Square,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +36,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IncidentStatusBadge, SeverityBadge } from "@/components/dashboard/status-badge";
 import { toast } from "sonner";
 
@@ -62,6 +66,8 @@ export default function IncidentsPage() {
     severity: "warning",
     affectedContainers: "",
   });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   useEffect(() => {
     fetchIncidents();
@@ -129,6 +135,83 @@ export default function IncidentsPage() {
       }
     } catch {
       toast.error("Failed to update status");
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredIncidents.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredIncidents.map((i) => i.id)));
+    }
+  };
+
+  const bulkUpdateStatus = async (status: string) => {
+    if (selectedIds.size === 0) {
+      toast.error("No incidents selected");
+      return;
+    }
+    setIsBulkUpdating(true);
+    try {
+      const response = await fetch("/api/incidents/bulk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), status }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success(`Updated ${selectedIds.size} incident(s) to ${status}`);
+        setSelectedIds(new Set());
+        fetchIncidents();
+      } else {
+        toast.error(data.error || "Failed to update incidents");
+      }
+    } catch {
+      toast.error("Failed to update incidents");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("No incidents selected");
+      return;
+    }
+    if (!confirm(`Delete ${selectedIds.size} incident(s)? This cannot be undone.`)) {
+      return;
+    }
+    setIsBulkUpdating(true);
+    try {
+      const response = await fetch("/api/incidents/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success(`Deleted ${selectedIds.size} incident(s)`);
+        setSelectedIds(new Set());
+        fetchIncidents();
+      } else {
+        toast.error(data.error || "Failed to delete incidents");
+      }
+    } catch {
+      toast.error("Failed to delete incidents");
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -269,39 +352,98 @@ export default function IncidentsPage() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-4">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="open">Open</SelectItem>
-            <SelectItem value="investigating">Investigating</SelectItem>
-            <SelectItem value="mitigated">Mitigated</SelectItem>
-            <SelectItem value="resolved">Resolved</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={severityFilter} onValueChange={setSeverityFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Severity" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Severity</SelectItem>
-            <SelectItem value="critical">Critical</SelectItem>
-            <SelectItem value="warning">Warning</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[160px]">
+              <Filter className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="investigating">Investigating</SelectItem>
+              <SelectItem value="mitigated">Mitigated</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={severityFilter} onValueChange={setSeverityFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Severity" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Severity</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Bulk Actions */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
+            <span className="text-sm text-muted-foreground">
+              {selectedIds.size} selected
+            </span>
+            <Select
+              value=""
+              onValueChange={(value) => bulkUpdateStatus(value)}
+              disabled={isBulkUpdating}
+            >
+              <SelectTrigger className="h-8 w-[140px]">
+                <SelectValue placeholder="Set status..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">Mark Open</SelectItem>
+                <SelectItem value="investigating">Mark Investigating</SelectItem>
+                <SelectItem value="mitigated">Mark Mitigated</SelectItem>
+                <SelectItem value="resolved">Mark Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={bulkDelete}
+              disabled={isBulkUpdating}
+            >
+              {isBulkUpdating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Select All */}
+      {filteredIncidents.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Checkbox
+            checked={selectedIds.size === filteredIncidents.length && filteredIncidents.length > 0}
+            onCheckedChange={toggleSelectAll}
+          />
+          <span
+            className="cursor-pointer hover:text-foreground"
+            onClick={toggleSelectAll}
+          >
+            Select all {filteredIncidents.length} incidents
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-4">
         {filteredIncidents.map((incident) => (
-          <Card key={incident.id} className="bg-card/50">
+          <Card key={incident.id} className={`bg-card/50 ${selectedIds.has(incident.id) ? 'ring-2 ring-primary' : ''}`}>
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">
+                  <Checkbox
+                    checked={selectedIds.has(incident.id)}
+                    onCheckedChange={() => toggleSelect(incident.id)}
+                    className="mt-1"
+                  />
                   <div
                     className={`p-2 rounded-lg ${
                       incident.severity === "critical"
