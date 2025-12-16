@@ -108,23 +108,28 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
 
       {/* Uptime bar graph */}
       <div className="relative">
-        <div className="flex items-end gap-0.5 h-24">
-          {displayData.map((day, i) => {
-            const height = day.checks > 0 ? (day.uptime / 100) * 100 : 100;
+        <div className="flex items-end gap-px h-24 bg-zinc-800/30 rounded-lg p-1">
+          {displayData.map((day) => {
+            // Height based on uptime percentage, minimum 4px for visibility
+            const heightPercent = day.checks > 0 ? day.uptime : 0;
             const color = getUptimeColor(day.uptime, day.checks);
             
             return (
               <div
                 key={day.date}
-                className="group relative flex-1 min-w-[2px]"
+                className="group relative flex-1 h-full flex items-end"
+                style={{ minWidth: "3px" }}
               >
                 <div
-                  className={`w-full rounded-t transition-all ${color} hover:opacity-80`}
-                  style={{ height: `${height}%` }}
+                  className={`w-full rounded-sm transition-all ${color} hover:brightness-110`}
+                  style={{ 
+                    height: day.checks > 0 ? `${Math.max(heightPercent, 4)}%` : "100%",
+                    opacity: day.checks > 0 ? 1 : 0.3
+                  }}
                 />
                 
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg bg-zinc-900 border border-white/10 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg bg-zinc-900 border border-white/10 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
                   <p className="font-medium text-white">
                     {formatDate(day.date)}
                   </p>
