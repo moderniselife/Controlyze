@@ -118,13 +118,21 @@ export default function MetricsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">
-                  {currentStats.cpuPercent.toFixed(1)}%
+                <div className="flex items-baseline gap-2">
+                  <div className="text-3xl font-bold">
+                    {(currentStats.cpuPercentNormalized ?? currentStats.cpuPercent).toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    of {currentStats.cpuCores || 1} core{(currentStats.cpuCores || 1) !== 1 ? 's' : ''}
+                  </div>
                 </div>
                 <Progress
-                  value={currentStats.cpuPercent}
+                  value={Math.min(currentStats.cpuPercentNormalized ?? currentStats.cpuPercent, 100)}
                   className="mt-2 h-2"
                 />
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Total: {currentStats.cpuPercent.toFixed(1)}% ({(currentStats.cpuPercent / 100).toFixed(2)} cores used)
+                </div>
               </CardContent>
             </Card>
 

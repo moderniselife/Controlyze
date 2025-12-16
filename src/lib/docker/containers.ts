@@ -37,7 +37,9 @@ export interface MountInfo {
 }
 
 export interface ContainerStats {
-  cpuPercent: number;
+  cpuPercent: number;         // Total CPU % across all cores (can exceed 100%)
+  cpuPercentNormalized: number; // CPU % normalized to 0-100 (divided by core count)
+  cpuCores: number;           // Number of CPU cores available
   memoryUsage: number;
   memoryLimit: number;
   memoryPercent: number;
@@ -228,10 +230,12 @@ export async function getContainerStats(id: string): Promise<ContainerStats> {
     stats.precpu_stats.cpu_usage.total_usage;
   const systemDelta =
     stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+  const cpuCores = stats.cpu_stats.online_cpus || 1;
   const cpuPercent =
     systemDelta > 0
-      ? (cpuDelta / systemDelta) * (stats.cpu_stats.online_cpus || 1) * 100
+      ? (cpuDelta / systemDelta) * cpuCores * 100
       : 0;
+  const cpuPercentNormalized = cpuCores > 0 ? cpuPercent / cpuCores : 0;
 
   const memoryUsage = stats.memory_stats.usage || 0;
   const memoryLimit = stats.memory_stats.limit || 1;
@@ -260,6 +264,8 @@ export async function getContainerStats(id: string): Promise<ContainerStats> {
 
   return {
     cpuPercent,
+    cpuPercentNormalized,
+    cpuCores,
     memoryUsage,
     memoryLimit,
     memoryPercent,

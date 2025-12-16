@@ -34,7 +34,9 @@ export interface MountInfo {
 }
 
 export interface ContainerStats {
-  cpuPercent: number;
+  cpuPercent: number;         // Total CPU % across all cores (can exceed 100%)
+  cpuPercentNormalized: number; // CPU % normalized to 0-100 (divided by core count)
+  cpuCores: number;           // Number of CPU cores available
   memoryUsage: number;
   memoryLimit: number;
   memoryPercent: number;
