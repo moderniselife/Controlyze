@@ -192,15 +192,16 @@ export async function GET() {
       return a.displayName.localeCompare(b.displayName);
     });
     
-    // Get unassigned containers (not in any service)
-    const assignedContainerIds = new Set<string>();
-    for (const service of services) {
-      for (const c of service.containers) {
-        assignedContainerIds.add(c.id);
+    // Get unassigned containers - those not explicitly in SAVED services
+    // (auto-detected services don't count - user should be able to reassign those)
+    const savedContainerIds = new Set<string>();
+    for (const saved of savedServices) {
+      for (const c of saved.containers || []) {
+        savedContainerIds.add(c.id);
       }
     }
     const unassignedContainers = allContainers
-      .filter((c) => !assignedContainerIds.has(c.id))
+      .filter((c) => !savedContainerIds.has(c.id))
       .map((c) => ({
         id: c.id,
         name: c.name,
