@@ -103,7 +103,7 @@ export default function SettingsPage() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [newServiceDialog, setNewServiceDialog] = useState(false);
-  const [newServiceData, setNewServiceData] = useState({ name: "", displayName: "", group: "Other" });
+  const [newServiceData, setNewServiceData] = useState({ name: "", displayName: "", group: "Other", selectedContainers: [] as string[] });
   const [editServiceDialog, setEditServiceDialog] = useState<string | null>(null);
   const [editServiceData, setEditServiceData] = useState({ displayName: "", group: "" });
 
@@ -363,26 +363,38 @@ export default function SettingsPage() {
       toast.error("Service name is required");
       return;
     }
-    const exists = statusConfig.services.some(s => s.name === newServiceData.name);
+    if (newServiceData.selectedContainers.length === 0) {
+      toast.error("Select at least one container");
+      return;
+    }
+    const serviceName = newServiceData.name.toLowerCase().replace(/\s+/g, "-");
+    const exists = statusConfig.services.some(s => s.name === serviceName);
     if (exists) {
       toast.error("Service already exists");
       return;
     }
+    
+    // Get selected containers from unassigned list
+    const selectedContainerObjects = (statusConfig.unassignedContainers || [])
+      .filter(c => newServiceData.selectedContainers.includes(c.id));
+    
     setStatusConfig((prev) => ({
       ...prev,
+      unassignedContainers: (prev.unassignedContainers || [])
+        .filter(c => !newServiceData.selectedContainers.includes(c.id)),
       services: [
         ...prev.services,
         {
-          name: newServiceData.name.toLowerCase().replace(/\s+/g, "-"),
+          name: serviceName,
           displayName: newServiceData.displayName || newServiceData.name,
           group: newServiceData.group,
           enabled: true,
           impact: "major",
-          containers: [],
+          containers: selectedContainerObjects,
         },
       ],
     }));
-    setNewServiceData({ name: "", displayName: "", group: "Other" });
+    setNewServiceData({ name: "", displayName: "", group: "Other", selectedContainers: [] });
     setNewServiceDialog(false);
     toast.success("Service created - don't forget to save!");
   };
@@ -1014,14 +1026,14 @@ export default function SettingsPage() {
           {/* New Service Dialog */}
           {newServiceDialog && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <Card className="w-[400px]">
+              <Card className="w-[500px] max-h-[80vh] overflow-hidden flex flex-col">
                 <CardHeader>
                   <CardTitle>Create New Service</CardTitle>
                   <CardDescription>
                     Create a service to group containers on the status page
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 overflow-y-auto">
                   <div className="space-y-2">
                     <Label>Service Name (ID)</Label>
                     <Input
@@ -1057,11 +1069,79 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setNewServiceDialog(false)}>
+                  <div className="space-y-2">
+                    <Label>Select Containers</Label>
+                    {(statusConfig.unassignedContainers?.length || 0) === 0 ? (
+                      <p className="text-sm text-muted-foreground p-3 border rounded-lg">
+                        No unassigned containers available. All containers are already assigned to services.
+                      </p>
+                    ) : (
+                      <div className="border rounded-lg max-h-48 overflow-y-auto">
+                        {statusConfig.unassignedContainers?.map((container) => (
+                          <label
+                            key={container.id}
+                            className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={newServiceData.selectedContainers.includes(container.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewServiceData({
+                                    ...newServiceData,
+                                    selectedContainers: [...newServiceData.selectedContainers, container.id],
+                                  });
+                                } else {
+                                  setNewServiceData({
+                                    ...newServiceData,
+                                    selectedContainers: newServiceData.selectedContainers.filter(id => id !== container.id),
+                                  });
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <div className="flex items-center gap-2 flex-1">
+                              <span
+                                className={`${
+                                  container.state === "running"
+                                    ? container.healthStatus === "unhealthy"
+                                      ? "text-amber-400"
+                                      : "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {container.name}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                  container.state === "running"
+                                    ? container.healthStatus === "unhealthy"
+                                      ? "bg-amber-500/20 text-amber-400"
+                                      : "bg-emerald-500/20 text-emerald-400"
+                                    : "bg-red-500/20 text-red-400"
+                                }`}
+                              >
+                                {container.state}
+                              </span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {newServiceData.selectedContainers.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {newServiceData.selectedContainers.length} container(s) selected
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2">
+                    <Button variant="outline" onClick={() => {
+                      setNewServiceDialog(false);
+                      setNewServiceData({ name: "", displayName: "", group: "Other", selectedContainers: [] });
+                    }}>
                       Cancel
                     </Button>
-                    <Button onClick={createService}>
+                    <Button onClick={createService} disabled={newServiceData.selectedContainers.length === 0}>
                       Create Service
                     </Button>
                   </div>

@@ -180,20 +180,87 @@ export async function GET() {
     const config = loadRawConfig();
     
     // Build service config map from saved settings
-    const serviceConfigs: Record<string, { enabled: boolean; impact: string }> = {};
-    for (const svc of config.statusPage?.services || []) {
-      serviceConfigs[svc.name] = { enabled: svc.enabled ?? true, impact: svc.impact || "major" };
+    const savedServices = config.statusPage?.services || [];
+    const serviceConfigs: Record<string, { enabled: boolean; impact: string; displayName?: string; group?: string }> = {};
+    for (const svc of savedServices) {
+      serviceConfigs[svc.name] = { 
+        enabled: svc.enabled ?? true, 
+        impact: svc.impact || "major",
+        displayName: svc.displayName,
+        group: svc.group,
+      };
     }
 
     const serviceMap = new Map<string, PublicServiceStatus>();
 
-    // Get list of known services from display names
-    const knownServices = Object.keys(SERVICE_DISPLAY_NAMES);
-
     // Get per-container settings
     const containerConfigs = config.statusPage?.containers || {};
 
+    // Build container lookup by ID and name
+    const containerLookup = new Map<string, typeof containers[0]>();
+    for (const c of containers) {
+      containerLookup.set(c.id, c);
+      containerLookup.set(c.name, c);
+    }
+
+    // First, process custom services from saved config (these take priority)
+    for (const savedService of savedServices) {
+      if (!savedService.enabled) continue;
+      
+      const serviceContainers: ContainerInfo[] = [];
+      let worstStatus: PublicServiceStatus["status"] = "operational";
+      
+      for (const savedContainer of savedService.containers || []) {
+        // Find the actual container by ID or name
+        const actualContainer = containerLookup.get(savedContainer.id) || containerLookup.get(savedContainer.name);
+        if (!actualContainer) continue;
+        
+        // Check if container is enabled
+        const containerConfig = containerConfigs[actualContainer.id] || containerConfigs[actualContainer.name];
+        if (containerConfig && !containerConfig.enabled) continue;
+        
+        const containerInfo: ContainerInfo = {
+          id: actualContainer.id,
+          name: actualContainer.name,
+          status: actualContainer.status,
+          state: actualContainer.state,
+          healthStatus: actualContainer.healthStatus,
+        };
+        serviceContainers.push(containerInfo);
+        
+        // Track worst status
+        const status = getServiceStatus(actualContainer.state, actualContainer.healthStatus);
+        if (status === "down") worstStatus = "down";
+        else if (status === "degraded" && worstStatus === "operational") worstStatus = "degraded";
+      }
+      
+      // Only add service if it has containers
+      if (serviceContainers.length > 0) {
+        serviceMap.set(savedService.name, {
+          name: savedService.name,
+          displayName: savedService.displayName || savedService.name,
+          status: worstStatus,
+          group: savedService.group || "Other",
+          icon: SERVICE_ICONS[savedService.name],
+          containers: serviceContainers,
+        });
+      }
+    }
+
+    // Then, auto-detect services from containers not already assigned
+    const assignedContainerIds = new Set<string>();
+    for (const service of serviceMap.values()) {
+      for (const c of service.containers) {
+        assignedContainerIds.add(c.id);
+      }
+    }
+
+    const knownServices = Object.keys(SERVICE_DISPLAY_NAMES);
+    
     for (const container of containers) {
+      // Skip if already assigned to a custom service
+      if (assignedContainerIds.has(container.id)) continue;
+      
       const serviceName = container.serviceName || container.name;
       const lowerName = serviceName.toLowerCase();
 
@@ -225,7 +292,7 @@ export async function GET() {
 
         if (serviceMap.has(matchedService)) {
           serviceMap.get(matchedService)!.containers.push(containerInfo);
-          // Update status if this container is worse (only if container is enabled)
+          // Update status if this container is worse
           const currentStatus = serviceMap.get(matchedService)!.status;
           const newStatus = getServiceStatus(container.state, container.healthStatus);
           if (newStatus === "down" || (newStatus === "degraded" && currentStatus === "operational")) {
@@ -234,11 +301,9 @@ export async function GET() {
         } else {
           serviceMap.set(matchedService, {
             name: matchedService,
-            displayName:
-              SERVICE_DISPLAY_NAMES[matchedService] ||
-              serviceName.charAt(0).toUpperCase() + serviceName.slice(1),
+            displayName: svcConfig?.displayName || SERVICE_DISPLAY_NAMES[matchedService] || serviceName,
             status: getServiceStatus(container.state, container.healthStatus),
-            group: SERVICE_GROUPS[matchedService] || "Other",
+            group: svcConfig?.group || SERVICE_GROUPS[matchedService] || "Other",
             icon: SERVICE_ICONS[matchedService],
             containers: [containerInfo],
           });
