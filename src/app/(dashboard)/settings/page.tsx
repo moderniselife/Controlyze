@@ -18,6 +18,9 @@ import {
   ChevronDown,
   ChevronUp,
   Box,
+  Pencil,
+  ArrowRight,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,6 +80,7 @@ interface StatusPageConfig {
   domain: string;
   services: StatusServiceConfig[];
   containers: ContainerSettings;
+  unassignedContainers?: ServiceContainer[];
 }
 
 export default function SettingsPage() {
@@ -98,6 +102,10 @@ export default function SettingsPage() {
   });
   const [statusLoading, setStatusLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [newServiceDialog, setNewServiceDialog] = useState(false);
+  const [newServiceData, setNewServiceData] = useState({ name: "", displayName: "", group: "Other" });
+  const [editServiceDialog, setEditServiceDialog] = useState<string | null>(null);
+  const [editServiceData, setEditServiceData] = useState({ displayName: "", group: "" });
 
   const toggleGroup = (group: string) => {
     setExpandedGroups((prev) => {
@@ -348,6 +356,95 @@ export default function SettingsPage() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     setIsSaving(false);
     toast.success("Settings saved successfully");
+  };
+
+  const createService = () => {
+    if (!newServiceData.name.trim()) {
+      toast.error("Service name is required");
+      return;
+    }
+    const exists = statusConfig.services.some(s => s.name === newServiceData.name);
+    if (exists) {
+      toast.error("Service already exists");
+      return;
+    }
+    setStatusConfig((prev) => ({
+      ...prev,
+      services: [
+        ...prev.services,
+        {
+          name: newServiceData.name.toLowerCase().replace(/\s+/g, "-"),
+          displayName: newServiceData.displayName || newServiceData.name,
+          group: newServiceData.group,
+          enabled: true,
+          impact: "major",
+          containers: [],
+        },
+      ],
+    }));
+    setNewServiceData({ name: "", displayName: "", group: "Other" });
+    setNewServiceDialog(false);
+    toast.success("Service created - don't forget to save!");
+  };
+
+  const updateServiceDetails = (serviceName: string) => {
+    setStatusConfig((prev) => ({
+      ...prev,
+      services: prev.services.map((s) =>
+        s.name === serviceName
+          ? { ...s, displayName: editServiceData.displayName, group: editServiceData.group }
+          : s
+      ),
+    }));
+    setEditServiceDialog(null);
+    toast.success("Service updated - don't forget to save!");
+  };
+
+  const deleteService = (serviceName: string) => {
+    if (!confirm(`Delete service "${serviceName}"? Containers will become unassigned.`)) return;
+    setStatusConfig((prev) => ({
+      ...prev,
+      services: prev.services.filter((s) => s.name !== serviceName),
+    }));
+    toast.success("Service deleted - don't forget to save!");
+  };
+
+  const assignContainerToService = (containerId: string, containerName: string, serviceName: string) => {
+    setStatusConfig((prev) => {
+      // Find the container in unassigned
+      const container = prev.unassignedContainers?.find((c) => c.id === containerId);
+      if (!container) return prev;
+
+      return {
+        ...prev,
+        unassignedContainers: prev.unassignedContainers?.filter((c) => c.id !== containerId),
+        services: prev.services.map((s) =>
+          s.name === serviceName
+            ? { ...s, containers: [...s.containers, container] }
+            : s
+        ),
+      };
+    });
+    toast.success(`Assigned to ${serviceName} - don't forget to save!`);
+  };
+
+  const unassignContainer = (containerId: string, containerName: string, serviceName: string) => {
+    setStatusConfig((prev) => {
+      const service = prev.services.find((s) => s.name === serviceName);
+      const container = service?.containers.find((c) => c.id === containerId);
+      if (!container) return prev;
+
+      return {
+        ...prev,
+        unassignedContainers: [...(prev.unassignedContainers || []), container],
+        services: prev.services.map((s) =>
+          s.name === serviceName
+            ? { ...s, containers: s.containers.filter((c) => c.id !== containerId) }
+            : s
+        ),
+      };
+    });
+    toast.success("Container unassigned - don't forget to save!");
   };
 
   return (
@@ -688,28 +785,49 @@ export default function SettingsPage() {
                                     onCheckedChange={() => toggleServiceEnabled(service.name)}
                                   />
                                   <span className="font-medium">{service.displayName}</span>
+                                  <span className="text-xs text-muted-foreground">({service.name})</span>
                                 </div>
-                                <Select
-                                  value={service.impact}
-                                  onValueChange={(value: "critical" | "major" | "minor") =>
-                                    updateServiceImpact(service.name, value)
-                                  }
-                                >
-                                  <SelectTrigger className="w-[120px]">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="critical">
-                                      <span className="text-red-500">Critical</span>
-                                    </SelectItem>
-                                    <SelectItem value="major">
-                                      <span className="text-amber-500">Major</span>
-                                    </SelectItem>
-                                    <SelectItem value="minor">
-                                      <span className="text-blue-500">Minor</span>
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditServiceData({ displayName: service.displayName, group: service.group });
+                                      setEditServiceDialog(service.name);
+                                    }}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Select
+                                    value={service.impact}
+                                    onValueChange={(value: "critical" | "major" | "minor") =>
+                                      updateServiceImpact(service.name, value)
+                                    }
+                                  >
+                                    <SelectTrigger className="w-[120px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="critical">
+                                        <span className="text-red-500">Critical</span>
+                                      </SelectItem>
+                                      <SelectItem value="major">
+                                        <span className="text-amber-500">Major</span>
+                                      </SelectItem>
+                                      <SelectItem value="minor">
+                                        <span className="text-blue-500">Minor</span>
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => deleteService(service.name)}
+                                    className="text-red-500 hover:text-red-400"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               </div>
                               {service.containers && service.containers.length > 0 && (
                                 <div className="border-t border-border/50">
@@ -753,27 +871,38 @@ export default function SettingsPage() {
                                               {container.state}
                                             </span>
                                           </div>
-                                          <Select
-                                            value={container.impact}
-                                            onValueChange={(value: "critical" | "major" | "minor") =>
-                                              updateContainerImpact(container.id, container.name, value)
-                                            }
-                                          >
-                                            <SelectTrigger className="w-[100px] h-7 text-xs">
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="critical">
-                                                <span className="text-red-500">Critical</span>
-                                              </SelectItem>
-                                              <SelectItem value="major">
-                                                <span className="text-amber-500">Major</span>
-                                              </SelectItem>
-                                              <SelectItem value="minor">
-                                                <span className="text-blue-500">Minor</span>
-                                              </SelectItem>
-                                            </SelectContent>
-                                          </Select>
+                                          <div className="flex items-center gap-1">
+                                            <Select
+                                              value={container.impact}
+                                              onValueChange={(value: "critical" | "major" | "minor") =>
+                                                updateContainerImpact(container.id, container.name, value)
+                                              }
+                                            >
+                                              <SelectTrigger className="w-[100px] h-7 text-xs">
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="critical">
+                                                  <span className="text-red-500">Critical</span>
+                                                </SelectItem>
+                                                <SelectItem value="major">
+                                                  <span className="text-amber-500">Major</span>
+                                                </SelectItem>
+                                                <SelectItem value="minor">
+                                                  <span className="text-blue-500">Minor</span>
+                                                </SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => unassignContainer(container.id, container.name, service.name)}
+                                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                                              title="Unassign from service"
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
@@ -788,6 +917,83 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
+
+              {/* Create New Service Button */}
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={() => setNewServiceDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Service
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* Unassigned Containers */}
+              {statusConfig.unassignedContainers && statusConfig.unassignedContainers.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Box className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Unassigned Containers</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({statusConfig.unassignedContainers.length})
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    These containers are not assigned to any service. Assign them to show on the status page.
+                  </p>
+                  <div className="grid gap-2">
+                    {statusConfig.unassignedContainers.map((container) => (
+                      <div
+                        key={container.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-background/50 border"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`${
+                              container.state === "running"
+                                ? container.healthStatus === "unhealthy"
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {container.name}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              container.state === "running"
+                                ? container.healthStatus === "unhealthy"
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : "bg-emerald-500/20 text-emerald-400"
+                                : "bg-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {container.state}
+                          </span>
+                        </div>
+                        <Select
+                          value=""
+                          onValueChange={(serviceName) => 
+                            assignContainerToService(container.id, container.name, serviceName)
+                          }
+                        >
+                          <SelectTrigger className="w-[160px] h-8">
+                            <SelectValue placeholder="Assign to service..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {statusConfig.services.map((service) => (
+                              <SelectItem key={service.name} value={service.name}>
+                                {service.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Separator />
               <div className="text-sm text-muted-foreground space-y-1">
                 <p><strong className="text-red-500">Critical:</strong> Core services - if down, shows &quot;Major Outage&quot;</p>
@@ -804,6 +1010,115 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* New Service Dialog */}
+          {newServiceDialog && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="w-[400px]">
+                <CardHeader>
+                  <CardTitle>Create New Service</CardTitle>
+                  <CardDescription>
+                    Create a service to group containers on the status page
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Service Name (ID)</Label>
+                    <Input
+                      value={newServiceData.name}
+                      onChange={(e) => setNewServiceData({ ...newServiceData, name: e.target.value })}
+                      placeholder="e.g., jackett"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Display Name</Label>
+                    <Input
+                      value={newServiceData.displayName}
+                      onChange={(e) => setNewServiceData({ ...newServiceData, displayName: e.target.value })}
+                      placeholder="e.g., Torrent Indexer"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Group</Label>
+                    <Select
+                      value={newServiceData.group}
+                      onValueChange={(value) => setNewServiceData({ ...newServiceData, group: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Media">Media</SelectItem>
+                        <SelectItem value="Indexing">Indexing</SelectItem>
+                        <SelectItem value="Automation">Automation</SelectItem>
+                        <SelectItem value="Infrastructure">Infrastructure</SelectItem>
+                        <SelectItem value="Storage">Storage</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setNewServiceDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={createService}>
+                      Create Service
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Edit Service Dialog */}
+          {editServiceDialog && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="w-[400px]">
+                <CardHeader>
+                  <CardTitle>Edit Service</CardTitle>
+                  <CardDescription>
+                    Update the display name and group for {editServiceDialog}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Display Name</Label>
+                    <Input
+                      value={editServiceData.displayName}
+                      onChange={(e) => setEditServiceData({ ...editServiceData, displayName: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Group</Label>
+                    <Select
+                      value={editServiceData.group}
+                      onValueChange={(value) => setEditServiceData({ ...editServiceData, group: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Media">Media</SelectItem>
+                        <SelectItem value="Indexing">Indexing</SelectItem>
+                        <SelectItem value="Automation">Automation</SelectItem>
+                        <SelectItem value="Infrastructure">Infrastructure</SelectItem>
+                        <SelectItem value="Storage">Storage</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setEditServiceDialog(null)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={() => updateServiceDetails(editServiceDialog)}>
+                      Save Changes
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="docker" className="space-y-6">

@@ -81,62 +81,134 @@ export async function GET() {
   try {
     const config = loadRawConfig();
     
-    // Get current containers to auto-detect services
+    // Get ALL containers from Docker
     const containers = await listContainers(true);
-    const serviceContainerMap = new Map<string, { id: string; name: string; state: string; healthStatus?: string }[]>();
-    
-    for (const container of containers) {
-      const serviceName = (container.serviceName || container.name).toLowerCase();
-      for (const knownService of Object.keys(SERVICE_DISPLAY_NAMES)) {
-        if (serviceName.includes(knownService)) {
-          if (!serviceContainerMap.has(knownService)) {
-            serviceContainerMap.set(knownService, []);
-          }
-          serviceContainerMap.get(knownService)!.push({
-            id: container.id,
-            name: container.name,
-            state: container.state,
-            healthStatus: container.healthStatus,
-          });
-        }
-      }
-    }
-
-    // Merge with saved config
     const savedServices = config.statusPage?.services || [];
     const savedContainers = config.statusPage?.containers || {};
     
-    const services = Array.from(serviceContainerMap.keys()).map((name) => {
-      const saved = savedServices.find((s: any) => s.name === name);
-      const rawContainers = serviceContainerMap.get(name) || [];
-      
-      // Add per-container settings
-      const containersWithSettings = rawContainers.map((c) => {
-        const containerConfig = savedContainers[c.id] || savedContainers[c.name] || {};
-        return {
-          ...c,
-          enabled: containerConfig.enabled ?? true,
-          impact: containerConfig.impact || saved?.impact || DEFAULT_IMPACT[name] || "major",
-        };
+    // Build a map of container ID/name -> service assignment from saved config
+    const containerToService = new Map<string, string>();
+    for (const service of savedServices) {
+      for (const container of service.containers || []) {
+        containerToService.set(container.id, service.name);
+        containerToService.set(container.name, service.name);
+      }
+    }
+    
+    // Build services from saved config, enriched with live container data
+    const serviceMap = new Map<string, {
+      name: string;
+      displayName: string;
+      group: string;
+      enabled: boolean;
+      impact: "critical" | "major" | "minor";
+      containers: { id: string; name: string; state: string; healthStatus?: string; enabled: boolean; impact: "critical" | "major" | "minor" }[];
+    }>();
+    
+    // Initialize from saved services
+    for (const saved of savedServices) {
+      serviceMap.set(saved.name, {
+        name: saved.name,
+        displayName: saved.displayName || SERVICE_DISPLAY_NAMES[saved.name] || saved.name,
+        group: saved.group || SERVICE_GROUPS[saved.name] || "Other",
+        enabled: saved.enabled ?? true,
+        impact: saved.impact || DEFAULT_IMPACT[saved.name] || "major",
+        containers: [],
       });
+    }
+    
+    // All containers with their current state
+    const allContainers = containers.map((c) => {
+      const containerConfig = savedContainers[c.id] || savedContainers[c.name] || {};
+      const assignedService = containerToService.get(c.id) || containerToService.get(c.name);
       
       return {
-        name,
-        displayName: saved?.displayName || SERVICE_DISPLAY_NAMES[name] || name,
-        group: saved?.group || SERVICE_GROUPS[name] || "Other",
-        enabled: saved?.enabled ?? true,
-        impact: saved?.impact || DEFAULT_IMPACT[name] || "major",
-        containers: containersWithSettings,
+        id: c.id,
+        name: c.name,
+        state: c.state,
+        healthStatus: c.healthStatus,
+        enabled: containerConfig.enabled ?? true,
+        impact: containerConfig.impact || "major" as const,
+        serviceName: assignedService || null,
       };
     });
-
-    // Sort by group then name
+    
+    // Add containers to their assigned services
+    for (const container of allContainers) {
+      if (container.serviceName && serviceMap.has(container.serviceName)) {
+        serviceMap.get(container.serviceName)!.containers.push({
+          id: container.id,
+          name: container.name,
+          state: container.state,
+          healthStatus: container.healthStatus,
+          enabled: container.enabled,
+          impact: container.impact,
+        });
+      }
+    }
+    
+    // Auto-detect services for unassigned containers based on known names
+    for (const container of allContainers) {
+      if (container.serviceName) continue; // Already assigned
+      
+      const containerNameLower = container.name.toLowerCase();
+      let matchedService: string | null = null;
+      
+      for (const knownService of Object.keys(SERVICE_DISPLAY_NAMES)) {
+        if (containerNameLower.includes(knownService)) {
+          matchedService = knownService;
+          break;
+        }
+      }
+      
+      if (matchedService) {
+        if (!serviceMap.has(matchedService)) {
+          serviceMap.set(matchedService, {
+            name: matchedService,
+            displayName: SERVICE_DISPLAY_NAMES[matchedService] || matchedService,
+            group: SERVICE_GROUPS[matchedService] || "Other",
+            enabled: true,
+            impact: DEFAULT_IMPACT[matchedService] || "major",
+            containers: [],
+          });
+        }
+        serviceMap.get(matchedService)!.containers.push({
+          id: container.id,
+          name: container.name,
+          state: container.state,
+          healthStatus: container.healthStatus,
+          enabled: container.enabled,
+          impact: container.impact,
+        });
+      }
+    }
+    
+    // Convert to array and sort
+    const services = Array.from(serviceMap.values());
     services.sort((a, b) => {
-      const groupOrder = ["Media", "Indexing", "Automation", "Infrastructure", "Other"];
+      const groupOrder = ["Media", "Indexing", "Automation", "Infrastructure", "Storage", "Other"];
       const groupDiff = groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group);
       if (groupDiff !== 0) return groupDiff;
       return a.displayName.localeCompare(b.displayName);
     });
+    
+    // Get unassigned containers (not in any service)
+    const assignedContainerIds = new Set<string>();
+    for (const service of services) {
+      for (const c of service.containers) {
+        assignedContainerIds.add(c.id);
+      }
+    }
+    const unassignedContainers = allContainers
+      .filter((c) => !assignedContainerIds.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        state: c.state,
+        healthStatus: c.healthStatus,
+        enabled: c.enabled,
+        impact: c.impact,
+      }));
 
     return NextResponse.json({
       success: true,
@@ -145,6 +217,7 @@ export async function GET() {
         title: config.statusPage?.title || "System Status",
         domain: config.statusPage?.domain || "",
         services,
+        unassignedContainers,
         containers: savedContainers,
       },
     });
