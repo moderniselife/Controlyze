@@ -8,12 +8,43 @@ export async function GET() {
   try {
     const allIncidents = await db.select().from(incidents).orderBy(desc(incidents.createdAt));
     
-    const formatted = allIncidents.map((incident) => ({
-      ...incident,
-      affectedContainers: incident.affectedContainers ? JSON.parse(incident.affectedContainers) : [],
-      affectedStacks: incident.affectedStacks ? JSON.parse(incident.affectedStacks) : [],
-      logExcerpts: incident.logExcerpts ? JSON.parse(incident.logExcerpts) : [],
-    }));
+    const formatted = allIncidents.map((incident) => {
+      // Parse JSON fields safely
+      let affectedContainers: string[] = [];
+      let affectedStacks: string[] = [];
+      let affectedServices: string[] = [];
+      let logExcerpts: string | string[] = [];
+      
+      try {
+        affectedContainers = incident.affectedContainers ? JSON.parse(incident.affectedContainers) : [];
+      } catch { affectedContainers = []; }
+      
+      try {
+        affectedStacks = incident.affectedStacks ? JSON.parse(incident.affectedStacks) : [];
+      } catch { affectedStacks = []; }
+      
+      try {
+        affectedServices = incident.affectedServices ? JSON.parse(incident.affectedServices) : [];
+      } catch { affectedServices = []; }
+      
+      // logExcerpts can be either a JSON array or a plain string
+      if (incident.logExcerpts) {
+        try {
+          logExcerpts = JSON.parse(incident.logExcerpts);
+        } catch {
+          // It's a plain string, keep it as-is
+          logExcerpts = incident.logExcerpts;
+        }
+      }
+      
+      return {
+        ...incident,
+        affectedContainers,
+        affectedStacks,
+        affectedServices,
+        logExcerpts,
+      };
+    });
 
     return NextResponse.json({
       success: true,
