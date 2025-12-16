@@ -107,36 +107,45 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
       </div>
 
       {/* Uptime bar graph */}
-      <div className="relative">
-        <div className="flex items-end gap-px h-24 bg-zinc-800/30 rounded-lg p-1">
+      <div className="relative bg-zinc-900/50 rounded-lg p-3">
+        <div 
+          className="flex items-end gap-[2px]"
+          style={{ height: "80px" }}
+        >
           {displayData.map((day) => {
-            // Height based on uptime percentage, minimum 4px for visibility
-            const heightPercent = day.checks > 0 ? day.uptime : 0;
-            const color = getUptimeColor(day.uptime, day.checks);
+            const hasData = day.checks > 0;
+            const barHeight = hasData ? Math.max(day.uptime, 5) : 5;
+            
+            let bgColor = "bg-zinc-600"; // no data
+            if (hasData) {
+              if (day.uptime >= 99.9) bgColor = "bg-emerald-500";
+              else if (day.uptime >= 95) bgColor = "bg-yellow-500";
+              else if (day.uptime >= 90) bgColor = "bg-orange-500";
+              else bgColor = "bg-red-500";
+            }
             
             return (
               <div
                 key={day.date}
-                className="group relative flex-1 h-full flex items-end"
-                style={{ minWidth: "3px" }}
+                className="group relative flex-1 flex flex-col justify-end"
+                style={{ minWidth: "2px" }}
               >
                 <div
-                  className={`w-full rounded-sm transition-all ${color} hover:brightness-110`}
+                  className={`w-full ${bgColor} rounded-t-sm cursor-pointer hover:brightness-125 transition-all`}
                   style={{ 
-                    height: day.checks > 0 ? `${Math.max(heightPercent, 4)}%` : "100%",
-                    opacity: day.checks > 0 ? 1 : 0.3
+                    height: `${barHeight}%`,
                   }}
                 />
                 
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg bg-zinc-900 border border-white/10 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg bg-black border border-white/20 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
                   <p className="font-medium text-white">
                     {formatDate(day.date)}
                   </p>
-                  <p className="text-zinc-400">
-                    {day.checks > 0 ? `${day.uptime.toFixed(1)}% uptime` : "No data"}
+                  <p className={hasData ? "text-zinc-300" : "text-zinc-500"}>
+                    {hasData ? `${day.uptime.toFixed(1)}% uptime` : "No data"}
                   </p>
-                  {day.checks > 0 && (
+                  {hasData && (
                     <p className="text-zinc-500">{day.checks} checks</p>
                   )}
                 </div>
@@ -146,7 +155,7 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
         </div>
 
         {/* X-axis labels */}
-        <div className="flex justify-between mt-2 text-xs text-zinc-600">
+        <div className="flex justify-between mt-3 text-xs text-zinc-500">
           <span>{formatDate(displayData[0]?.date)}</span>
           <span>{formatDate(displayData[displayData.length - 1]?.date)}</span>
         </div>
