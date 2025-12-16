@@ -127,16 +127,17 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
       </div>
 
       {/* Uptime bar graph */}
-      <div className="relative bg-zinc-900/50 rounded-lg p-3">
+      <div className="relative bg-zinc-800/50 rounded-lg p-3">
         <div 
-          className="flex items-end gap-[2px]"
-          style={{ height: "80px" }}
+          className="flex items-end gap-px"
+          style={{ height: "100px" }}
         >
           {displayData.map((day) => {
             const hasData = day.checks > 0;
-            const barHeight = hasData ? Math.max(day.uptime, 5) : 5;
+            // Use pixel-based height for better visibility
+            const heightPx = hasData ? Math.max((day.uptime / 100) * 100, 8) : 8;
             
-            let bgColor = "bg-zinc-600"; // no data
+            let bgColor = "bg-zinc-700"; // no data - slightly lighter
             if (hasData) {
               if (day.uptime >= 99.9) bgColor = "bg-emerald-500";
               else if (day.uptime >= 95) bgColor = "bg-yellow-500";
@@ -147,13 +148,14 @@ export function UptimeGraph({ className = "" }: UptimeGraphProps) {
             return (
               <div
                 key={day.date}
-                className="group relative flex-1 flex flex-col justify-end"
-                style={{ minWidth: "2px" }}
+                className="group relative flex-1 h-full flex flex-col justify-end"
+                style={{ minWidth: "1px" }}
               >
                 <div
-                  className={`w-full ${bgColor} rounded-t-sm cursor-pointer hover:brightness-125 transition-all`}
+                  className={`w-full ${bgColor} rounded-t-sm cursor-pointer hover:brightness-150 transition-all`}
                   style={{ 
-                    height: `${barHeight}%`,
+                    height: `${heightPx}px`,
+                    minHeight: "4px",
                   }}
                 />
                 
