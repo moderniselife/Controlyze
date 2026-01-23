@@ -33,12 +33,20 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy drizzle config and migrations for automatic schema updates
+# Copy drizzle config, migrations, and schema for automatic schema updates
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/src/lib/db ./src/lib/db
-RUN mkdir -p /app/drizzle && chown nextjs:nodejs /app/drizzle
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+
+# Copy drizzle-kit and its dependencies from builder
 COPY --from=builder /app/node_modules/drizzle-kit ./node_modules/drizzle-kit
+COPY --from=builder /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/.bin/drizzle-kit ./node_modules/.bin/drizzle-kit
+
+# Add node_modules/.bin to PATH for drizzle-kit
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 # Copy entrypoint script
 COPY --chown=nextjs:nodejs scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
