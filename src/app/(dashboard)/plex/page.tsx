@@ -38,6 +38,9 @@ interface PlexStatus {
     consecutiveFailures: number;
     actionTaken?: string;
     restartedContainers?: string[];
+    notificationsSent?: string[];
+    webhookDelivered?: boolean;
+    alertTriggered?: boolean;
   }>;
 }
 
@@ -293,7 +296,7 @@ export default function PlexMonitorPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {log.actionTaken === "restart" && (
                     <Badge variant="outline" className="flex items-center gap-1">
                       <RefreshCw className="h-3 w-3" />
@@ -308,6 +311,21 @@ export default function PlexMonitorPage() {
                   {log.unavailableLibraries.length > 0 && (
                     <Badge variant="destructive">
                       {log.unavailableLibraries.length} unavailable
+                    </Badge>
+                  )}
+                  {log.notificationsSent && log.notificationsSent.length > 0 && (
+                    <Badge variant="default" className="bg-blue-500">
+                      📢 {log.notificationsSent.join(", ")}
+                    </Badge>
+                  )}
+                  {log.webhookDelivered && (
+                    <Badge variant="default" className="bg-purple-500">
+                      🔗 Webhook
+                    </Badge>
+                  )}
+                  {log.alertTriggered && (
+                    <Badge variant="default" className="bg-orange-500">
+                      🚨 Alert
                     </Badge>
                   )}
                 </div>
