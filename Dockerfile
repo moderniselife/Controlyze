@@ -39,11 +39,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/src/lib/db ./src/lib/db
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
-# Copy drizzle-kit and its dependencies from builder
+# Copy drizzle-kit and all its dependencies from builder
 COPY --from=builder /app/node_modules/drizzle-kit ./node_modules/drizzle-kit
 COPY --from=builder /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
-COPY --from=builder /app/node_modules/.bin/drizzle-kit ./node_modules/.bin/drizzle-kit
+COPY --from=builder /app/node_modules/esbuild ./node_modules/esbuild
+COPY --from=builder /app/node_modules/@esbuild ./node_modules/@esbuild
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 
 # Add node_modules/.bin to PATH for drizzle-kit
 ENV PATH="/app/node_modules/.bin:${PATH}"
