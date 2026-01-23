@@ -30,6 +30,9 @@ export async function GET() {
       consecutiveFailures: result.consecutiveFailures,
       actionTaken: result.actionTaken,
       restartedContainers: result.restartedContainers ? JSON.stringify(result.restartedContainers) : null,
+      notificationsSent: result.notificationsSent ? JSON.stringify(result.notificationsSent) : null,
+      webhookDelivered: result.webhookDelivered,
+      alertTriggered: result.alertTriggered,
     });
 
     return NextResponse.json({
@@ -56,6 +59,13 @@ async function getPlexMonitorConfig(): Promise<PlexMonitorConfig | null> {
   const zurgContainerName = process.env.ZURG_CONTAINER_NAME || "pd_zurg";
   const checkIntervalSeconds = parseInt(process.env.PLEX_CHECK_INTERVAL || "60");
   const maxConsecutiveFailures = parseInt(process.env.PLEX_MAX_FAILURES || "3");
+  const restartDelaySeconds = parseInt(process.env.PLEX_RESTART_DELAY || "5");
+  const discordWebhookUrl = process.env.PLEX_DISCORD_WEBHOOK_URL;
+  const webhookUrl = process.env.PLEX_WEBHOOK_URL;
+  const monitoredLibraries = process.env.PLEX_MONITORED_LIBRARIES
+    ? process.env.PLEX_MONITORED_LIBRARIES.split(",").map((lib) => lib.trim())
+    : undefined;
+  const enableAlerts = process.env.PLEX_ENABLE_ALERTS === "true";
 
   if (!plexUrl || !plexToken) {
     return null;
@@ -68,5 +78,10 @@ async function getPlexMonitorConfig(): Promise<PlexMonitorConfig | null> {
     zurgContainerName,
     checkIntervalSeconds,
     maxConsecutiveFailures,
+    restartDelaySeconds,
+    discordWebhookUrl,
+    webhookUrl,
+    monitoredLibraries,
+    enableAlerts,
   };
 }

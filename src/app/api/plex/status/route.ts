@@ -30,6 +30,9 @@ export async function GET(request: Request) {
       restartedContainers: log.restartedContainers
         ? JSON.parse(log.restartedContainers)
         : null,
+      notificationsSent: log.notificationsSent
+        ? JSON.parse(log.notificationsSent)
+        : null,
     }));
 
     const latestLog = parsedLogs[0];
