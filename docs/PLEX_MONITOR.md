@@ -247,11 +247,25 @@ Example cron configuration:
 - Database logs contain no sensitive information
 - Container operations require Docker socket access
 
+## Enhanced Features
+
+All requested enhancements have been implemented! See `PLEX_MONITOR_ENHANCEMENTS.md` for detailed documentation.
+
+- [x] Configurable restart delay between containers
+- [x] Discord notifications on restart
+- [x] Custom library selection for monitoring
+- [x] Webhook support for external integrations
+- [x] Grafana dashboard integration
+- [x] Alert rules for repeated failures
+
 ## Future Enhancements
 
-- [ ] Configurable restart delay between containers
-- [ ] Email/Discord notifications on restart
-- [ ] Custom library selection for monitoring
-- [ ] Webhook support for external integrations
-- [ ] Grafana dashboard integration
-- [ ] Alert rules for repeated failures
+Potential future additions:
+
+- [ ] Email notifications
+- [ ] SMS notifications via Twilio
+- [ ] Slack integration
+- [ ] Microsoft Teams integration
+- [ ] Per-library restart thresholds
+- [ ] Smart restart scheduling
+- [ ] Predictive failure detection
