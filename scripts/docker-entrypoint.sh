@@ -17,7 +17,7 @@ if command -v drizzle-kit >/dev/null 2>&1; then
   
   # Push schema changes to database
   echo "   - Pushing schema changes to database..."
-  echo "y" | drizzle-kit push --config=/app/drizzle.config.ts || {
+  yes | drizzle-kit push --config=/app/drizzle.config.ts 2>&1 | head -n 100 || {
     echo "⚠️  Migration push failed, but continuing startup..."
   }
   echo "✅ Database migrations completed"
