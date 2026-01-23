@@ -37,6 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { PlexMonitorSettings } from "@/components/settings/PlexMonitorSettings";
 
 interface AuthUser {
   username: string;
@@ -493,6 +494,7 @@ export default function SettingsPage() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="status">Status Page</TabsTrigger>
+          <TabsTrigger value="plex">Plex Monitor</TabsTrigger>
           <TabsTrigger value="docker">Docker</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -1199,6 +1201,10 @@ export default function SettingsPage() {
               </Card>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="plex" className="space-y-6">
+          <PlexMonitorSettings />
         </TabsContent>
 
         <TabsContent value="docker" className="space-y-6">

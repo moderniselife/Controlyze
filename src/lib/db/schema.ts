@@ -222,3 +222,22 @@ export const sessions = sqliteTable("sessions", {
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+
+export const plexMonitorLogs = sqliteTable("plex_monitor_logs", {
+  id: text("id").primaryKey(),
+  timestamp: integer("timestamp", { mode: "timestamp" }).notNull(),
+  isHealthy: integer("is_healthy", { mode: "boolean" }).notNull(),
+  mediaAvailable: integer("media_available", { mode: "boolean" }).notNull(),
+  error: text("error"),
+  librariesChecked: integer("libraries_checked").notNull(),
+  unavailableLibraries: text("unavailable_libraries"),
+  consecutiveFailures: integer("consecutive_failures").notNull(),
+  actionTaken: text("action_taken"),
+  restartedContainers: text("restarted_containers"),
+  notificationsSent: text("notifications_sent"),
+  webhookDelivered: integer("webhook_delivered", { mode: "boolean" }),
+  alertTriggered: integer("alert_triggered", { mode: "boolean" }),
+});
+
+export type PlexMonitorLog = typeof plexMonitorLogs.$inferSelect;
+export type NewPlexMonitorLog = typeof plexMonitorLogs.$inferInsert;
