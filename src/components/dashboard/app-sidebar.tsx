@@ -20,6 +20,7 @@ import {
   Cog,
   LogOut,
   Loader2,
+  Film,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ const navItems = [
       { title: "Logs", href: "/logs", icon: ScrollText },
       { title: "Metrics", href: "/metrics", icon: Activity },
       { title: "Events", href: "/events", icon: Calendar },
+      { title: "Plex Monitor", href: "/plex", icon: Film },
     ],
   },
   {
