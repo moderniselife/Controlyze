@@ -8,6 +8,11 @@ export interface PlexMonitorConfig {
   zurgContainerName: string;
   checkIntervalSeconds: number;
   maxConsecutiveFailures: number;
+  restartDelaySeconds?: number;
+  discordWebhookUrl?: string;
+  webhookUrl?: string;
+  monitoredLibraries?: string[];
+  enableAlerts?: boolean;
 }
 
 export interface PlexMonitorResult {
@@ -20,6 +25,9 @@ export interface PlexMonitorResult {
   consecutiveFailures: number;
   actionTaken?: "restart" | "none";
   restartedContainers?: string[];
+  notificationsSent?: string[];
+  webhookDelivered?: boolean;
+  alertTriggered?: boolean;
 }
 
 export interface PlexLibrary {
@@ -42,7 +50,11 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
   };
 
   try {
-    const libraries = await getPlexLibraries(config.plexUrl, config.plexToken);
+    const libraries = await getPlexLibraries(
+      config.plexUrl,
+      config.plexToken,
+      config.monitoredLibraries
+    );
     result.librariesChecked = libraries.length;
 
     const unavailable = libraries.filter((lib) => !lib.available);
@@ -57,8 +69,24 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
         result.actionTaken = "restart";
         result.restartedContainers = await restartPlexContainers(
           config.plexContainerName,
-          config.zurgContainerName
+          config.zurgContainerName,
+          config.restartDelaySeconds
         );
+        
+        result.notificationsSent = await sendNotifications(
+          config,
+          result.unavailableLibraries,
+          result.restartedContainers
+        );
+        
+        if (config.webhookUrl) {
+          result.webhookDelivered = await sendWebhook(config.webhookUrl, result);
+        }
+        
+        if (config.enableAlerts) {
+          result.alertTriggered = await triggerAlert(result);
+        }
+        
         consecutiveFailures = 0;
       }
     } else {
@@ -78,8 +106,24 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
         result.actionTaken = "restart";
         result.restartedContainers = await restartPlexContainers(
           config.plexContainerName,
-          config.zurgContainerName
+          config.zurgContainerName,
+          config.restartDelaySeconds
         );
+        
+        result.notificationsSent = await sendNotifications(
+          config,
+          [],
+          result.restartedContainers
+        );
+        
+        if (config.webhookUrl) {
+          result.webhookDelivered = await sendWebhook(config.webhookUrl, result);
+        }
+        
+        if (config.enableAlerts) {
+          result.alertTriggered = await triggerAlert(result);
+        }
+        
         consecutiveFailures = 0;
       } catch (restartError) {
         result.error = `${result.error}; Restart failed: ${restartError instanceof Error ? restartError.message : String(restartError)}`;
@@ -90,7 +134,11 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
   return result;
 }
 
-async function getPlexLibraries(plexUrl: string, plexToken: string): Promise<PlexLibrary[]> {
+async function getPlexLibraries(
+  plexUrl: string,
+  plexToken: string,
+  monitoredLibraries?: string[]
+): Promise<PlexLibrary[]> {
   const url = `${plexUrl}/library/sections?X-Plex-Token=${plexToken}`;
   
   const response = await fetch(url, {
@@ -104,7 +152,14 @@ async function getPlexLibraries(plexUrl: string, plexToken: string): Promise<Ple
   }
 
   const data = await response.json();
-  const sections = data.MediaContainer?.Directory || [];
+  let sections = data.MediaContainer?.Directory || [];
+
+  if (monitoredLibraries && monitoredLibraries.length > 0) {
+    sections = sections.filter((section: any) =>
+      monitoredLibraries.includes(section.title) ||
+      monitoredLibraries.includes(section.key)
+    );
+  }
 
   const libraries: PlexLibrary[] = [];
 
@@ -170,10 +225,12 @@ async function checkLibraryAvailability(
 
 async function restartPlexContainers(
   plexContainerName: string,
-  zurgContainerName: string
+  zurgContainerName: string,
+  restartDelaySeconds?: number
 ): Promise<string[]> {
   const docker = getDockerClient();
   const restartedContainers: string[] = [];
+  const delayMs = (restartDelaySeconds || 5) * 1000;
 
   try {
     const zurgContainer = await getContainer(zurgContainerName);
@@ -182,7 +239,7 @@ async function restartPlexContainers(
       restartedContainers.push(zurgContainerName);
       console.log(`Restarted container: ${zurgContainerName}`);
       
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   } catch (error) {
     console.error(`Failed to restart ${zurgContainerName}:`, error);
@@ -221,4 +278,121 @@ export async function findContainerByName(name: string): Promise<string | null> 
 
 export function resetFailureCount(): void {
   consecutiveFailures = 0;
+}
+
+async function sendNotifications(
+  config: PlexMonitorConfig,
+  unavailableLibraries: string[],
+  restartedContainers: string[]
+): Promise<string[]> {
+  const notifications: string[] = [];
+
+  if (config.discordWebhookUrl) {
+    try {
+      await sendDiscordNotification(
+        config.discordWebhookUrl,
+        unavailableLibraries,
+        restartedContainers
+      );
+      notifications.push("discord");
+    } catch (error) {
+      console.error("Failed to send Discord notification:", error);
+    }
+  }
+
+  return notifications;
+}
+
+async function sendDiscordNotification(
+  webhookUrl: string,
+  unavailableLibraries: string[],
+  restartedContainers: string[]
+): Promise<void> {
+  const embed = {
+    title: "🔄 Plex Media Server Restarted",
+    description: "Plex and Zurg containers have been automatically restarted due to media unavailability.",
+    color: 0xff6b35,
+    fields: [
+      {
+        name: "Unavailable Libraries",
+        value: unavailableLibraries.length > 0
+          ? unavailableLibraries.join(", ")
+          : "Error detected",
+        inline: false,
+      },
+      {
+        name: "Restarted Containers",
+        value: restartedContainers.join(", "),
+        inline: false,
+      },
+    ],
+    timestamp: new Date().toISOString(),
+    footer: {
+      text: "Controlyze Plex Monitor",
+    },
+  };
+
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ embeds: [embed] }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Discord webhook failed: ${response.status}`);
+  }
+}
+
+async function sendWebhook(
+  webhookUrl: string,
+  result: PlexMonitorResult
+): Promise<boolean> {
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event: "plex_restart",
+        timestamp: result.timestamp.toISOString(),
+        unavailableLibraries: result.unavailableLibraries,
+        restartedContainers: result.restartedContainers,
+        consecutiveFailures: result.consecutiveFailures,
+      }),
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to send webhook:", error);
+    return false;
+  }
+}
+
+async function triggerAlert(result: PlexMonitorResult): Promise<boolean> {
+  try {
+    const response = await fetch("/api/alerts/trigger", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        alertType: "plex_media_unavailable",
+        severity: "critical",
+        message: `Plex media unavailable. Libraries affected: ${result.unavailableLibraries.join(", ")}`,
+        details: {
+          unavailableLibraries: result.unavailableLibraries,
+          restartedContainers: result.restartedContainers,
+          consecutiveFailures: result.consecutiveFailures,
+        },
+      }),
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to trigger alert:", error);
+    return false;
+  }
 }
