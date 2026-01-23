@@ -116,13 +116,24 @@ PLEX_WEBHOOK_URL=https://your-domain.com/api/plex-events
 
 ---
 
-### 5. Grafana Dashboard Integration
+### 5. Status Page & Grafana Integration
+
+#### In-House Status Page (Primary)
+
+Plex monitoring is automatically integrated into your Controlyze status page at `/status`:
+- Displays "Plex Media Server" as a monitored service
+- Shows real-time operational/degraded/down status
+- Includes in uptime percentage calculations
+- Appears in the uptime history graph
+- No additional configuration needed
+
+#### Grafana Dashboard (Optional)
 
 **Metrics Endpoint:** `/api/metrics/plex`  
 **Format:** Prometheus text format  
 **Dashboard:** `grafana/plex-monitor-dashboard.json`
 
-Export Plex monitoring metrics in Prometheus format for Grafana visualization.
+Export Plex monitoring metrics in Prometheus format for external Grafana visualization.
 
 #### Available Metrics
 
