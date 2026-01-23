@@ -48,4 +48,4 @@ controlyze.yml
 docker-SchroStack.yml
 
 # drizzle
-/drizzle/
+# /drizzle/  # Commented out - we need to commit migrations for Docker builds
