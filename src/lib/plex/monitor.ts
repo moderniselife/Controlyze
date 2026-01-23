@@ -1,5 +1,6 @@
 import { getDockerClient } from "@/lib/docker/client";
 import { restartContainer, getContainer } from "@/lib/docker/containers";
+import { recordUptime } from "@/lib/uptime/recorder";
 
 export interface PlexMonitorConfig {
   plexUrl: string;
@@ -95,6 +96,12 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
     }
 
     result.isHealthy = result.mediaAvailable;
+    
+    // Record uptime for status page
+    await recordUptime([{
+      serviceName: "Plex Media Server",
+      status: result.mediaAvailable ? "operational" : "degraded",
+    }]);
   } catch (error) {
     result.isHealthy = false;
     result.error = error instanceof Error ? error.message : String(error);
@@ -129,6 +136,12 @@ export async function checkPlexHealth(config: PlexMonitorConfig): Promise<PlexMo
         result.error = `${result.error}; Restart failed: ${restartError instanceof Error ? restartError.message : String(restartError)}`;
       }
     }
+    
+    // Record uptime for status page (error case)
+    await recordUptime([{
+      serviceName: "Plex Media Server",
+      status: "down",
+    }]);
   }
 
   return result;
