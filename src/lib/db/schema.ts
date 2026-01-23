@@ -234,6 +234,9 @@ export const plexMonitorLogs = sqliteTable("plex_monitor_logs", {
   consecutiveFailures: integer("consecutive_failures").notNull(),
   actionTaken: text("action_taken"),
   restartedContainers: text("restarted_containers"),
+  notificationsSent: text("notifications_sent"),
+  webhookDelivered: integer("webhook_delivered", { mode: "boolean" }),
+  alertTriggered: integer("alert_triggered", { mode: "boolean" }),
 });
 
 export type PlexMonitorLog = typeof plexMonitorLogs.$inferSelect;
