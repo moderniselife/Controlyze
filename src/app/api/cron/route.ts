@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { evaluateAlerts } from "@/lib/alerts/evaluator";
 import { recordUptimeCheck } from "@/lib/uptime/tracker";
-import { checkPlexHealth, PlexMonitorConfig } from "@/lib/plex/monitor";
+import { checkPlexHealth } from "@/lib/plex/monitor";
+import { getPlexMonitorConfig } from "@/lib/plex/settings";
 import { db } from "@/lib/db";
 import { plexMonitorLogs } from "@/lib/db/schema";
 
@@ -19,7 +20,7 @@ export async function POST() {
     const triggeredAlerts = alertResults.filter((r) => r.triggered);
     
     let plexResult = null;
-    const plexConfig = getPlexMonitorConfig();
+    const plexConfig = await getPlexMonitorConfig();
     if (plexConfig) {
       try {
         plexResult = await checkPlexHealth(plexConfig);
@@ -79,36 +80,3 @@ export async function POST() {
   }
 }
 
-function getPlexMonitorConfig(): PlexMonitorConfig | null {
-  const plexUrl = process.env.PLEX_URL;
-  const plexToken = process.env.PLEX_TOKEN;
-  const plexContainerName = process.env.PLEX_CONTAINER_NAME || "plex";
-  const zurgContainerName = process.env.ZURG_CONTAINER_NAME || "pd_zurg";
-  const checkIntervalSeconds = parseInt(process.env.PLEX_CHECK_INTERVAL || "60");
-  const maxConsecutiveFailures = parseInt(process.env.PLEX_MAX_FAILURES || "3");
-  const restartDelaySeconds = parseInt(process.env.PLEX_RESTART_DELAY || "5");
-  const discordWebhookUrl = process.env.PLEX_DISCORD_WEBHOOK_URL;
-  const webhookUrl = process.env.PLEX_WEBHOOK_URL;
-  const monitoredLibraries = process.env.PLEX_MONITORED_LIBRARIES
-    ? process.env.PLEX_MONITORED_LIBRARIES.split(",").map((lib) => lib.trim())
-    : undefined;
-  const enableAlerts = process.env.PLEX_ENABLE_ALERTS === "true";
-
-  if (!plexUrl || !plexToken) {
-    return null;
-  }
-
-  return {
-    plexUrl,
-    plexToken,
-    plexContainerName,
-    zurgContainerName,
-    checkIntervalSeconds,
-    maxConsecutiveFailures,
-    restartDelaySeconds,
-    discordWebhookUrl,
-    webhookUrl,
-    monitoredLibraries,
-    enableAlerts,
-  };
-}

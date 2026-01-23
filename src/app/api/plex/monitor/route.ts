@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { checkPlexHealth, PlexMonitorConfig } from "@/lib/plex/monitor";
+import { checkPlexHealth } from "@/lib/plex/monitor";
+import { getPlexMonitorConfig } from "@/lib/plex/settings";
 import { db } from "@/lib/db";
 import { plexMonitorLogs } from "@/lib/db/schema";
 
@@ -52,36 +53,3 @@ export async function GET() {
   }
 }
 
-async function getPlexMonitorConfig(): Promise<PlexMonitorConfig | null> {
-  const plexUrl = process.env.PLEX_URL;
-  const plexToken = process.env.PLEX_TOKEN;
-  const plexContainerName = process.env.PLEX_CONTAINER_NAME || "plex";
-  const zurgContainerName = process.env.ZURG_CONTAINER_NAME || "pd_zurg";
-  const checkIntervalSeconds = parseInt(process.env.PLEX_CHECK_INTERVAL || "60");
-  const maxConsecutiveFailures = parseInt(process.env.PLEX_MAX_FAILURES || "3");
-  const restartDelaySeconds = parseInt(process.env.PLEX_RESTART_DELAY || "5");
-  const discordWebhookUrl = process.env.PLEX_DISCORD_WEBHOOK_URL;
-  const webhookUrl = process.env.PLEX_WEBHOOK_URL;
-  const monitoredLibraries = process.env.PLEX_MONITORED_LIBRARIES
-    ? process.env.PLEX_MONITORED_LIBRARIES.split(",").map((lib) => lib.trim())
-    : undefined;
-  const enableAlerts = process.env.PLEX_ENABLE_ALERTS === "true";
-
-  if (!plexUrl || !plexToken) {
-    return null;
-  }
-
-  return {
-    plexUrl,
-    plexToken,
-    plexContainerName,
-    zurgContainerName,
-    checkIntervalSeconds,
-    maxConsecutiveFailures,
-    restartDelaySeconds,
-    discordWebhookUrl,
-    webhookUrl,
-    monitoredLibraries,
-    enableAlerts,
-  };
-}
