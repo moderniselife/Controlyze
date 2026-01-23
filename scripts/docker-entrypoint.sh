@@ -7,16 +7,20 @@ echo "🚀 Starting Controlyze..."
 if command -v drizzle-kit >/dev/null 2>&1; then
   echo "📦 Running database migrations..."
   
-  # Run migrations if they exist
-  if [ -d "/app/drizzle" ]; then
-    echo "   - Pushing schema changes to database..."
-    drizzle-kit push --config=/app/drizzle.config.ts || {
-      echo "⚠️  Migration failed, but continuing startup..."
+  # Generate migrations if they don't exist
+  if [ ! -f "/app/drizzle/0000_*.sql" ]; then
+    echo "   - Generating initial migrations..."
+    drizzle-kit generate --config=/app/drizzle.config.ts || {
+      echo "⚠️  Migration generation failed, but continuing..."
     }
-    echo "✅ Database migrations completed"
-  else
-    echo "ℹ️  No migrations directory found, skipping..."
   fi
+  
+  # Push schema changes to database
+  echo "   - Pushing schema changes to database..."
+  drizzle-kit push --config=/app/drizzle.config.ts || {
+    echo "⚠️  Migration push failed, but continuing startup..."
+  }
+  echo "✅ Database migrations completed"
 else
   echo "ℹ️  drizzle-kit not found, skipping migrations..."
 fi
