@@ -17,7 +17,8 @@ if [ -d "/app/drizzle" ] && [ -n "$(ls -A /app/drizzle/*.sql 2>/dev/null)" ]; th
   for migration in /app/drizzle/*.sql; do
     if [ -f "$migration" ]; then
       echo "   - Running migration: $(basename "$migration")"
-      sqlite3 "$DB_PATH" < "$migration" 2>&1 | grep -v "table .* already exists" || true
+      # Convert backticks to double quotes for SQLite compatibility
+      sed 's/`/"/g' "$migration" | sqlite3 "$DB_PATH" 2>&1 | grep -v "table .* already exists" || true
     fi
   done
   echo "✅ Database migrations completed"
