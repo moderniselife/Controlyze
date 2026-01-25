@@ -20,12 +20,44 @@ async function runCronJob() {
     // Use internal function call instead of HTTP to avoid issues during SSR
     const { evaluateAlerts } = await import("@/lib/alerts/evaluator");
     const { recordUptimeCheck } = await import("@/lib/uptime/tracker");
+    const { checkPlexHealth } = await import("@/lib/plex/monitor");
+    const { getPlexMonitorConfig } = await import("@/lib/plex/settings");
+    const { db } = await import("@/lib/db");
+    const { plexMonitorLogs } = await import("@/lib/db/schema");
 
     const uptimeResult = await recordUptimeCheck();
     console.log(`[Scheduler] Uptime check recorded ${uptimeResult.length} services`);
     
     await evaluateAlerts();
     console.log("[Scheduler] Alert evaluation completed");
+    
+    // Run Plex monitoring
+    const plexConfig = await getPlexMonitorConfig();
+    if (plexConfig) {
+      try {
+        const plexResult = await checkPlexHealth(plexConfig);
+        
+        await db.insert(plexMonitorLogs).values({
+          id: `plex_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          timestamp: plexResult.timestamp,
+          isHealthy: plexResult.isHealthy,
+          mediaAvailable: plexResult.mediaAvailable,
+          error: plexResult.error,
+          librariesChecked: plexResult.librariesChecked,
+          unavailableLibraries: JSON.stringify(plexResult.unavailableLibraries),
+          consecutiveFailures: plexResult.consecutiveFailures,
+          actionTaken: plexResult.actionTaken,
+          restartedContainers: plexResult.restartedContainers ? JSON.stringify(plexResult.restartedContainers) : null,
+          notificationsSent: plexResult.notificationsSent ? JSON.stringify(plexResult.notificationsSent) : null,
+          webhookDelivered: plexResult.webhookDelivered,
+          alertTriggered: plexResult.alertTriggered,
+        });
+        
+        console.log(`[Scheduler] Plex monitoring completed - Healthy: ${plexResult.isHealthy}, Libraries: ${plexResult.librariesChecked}`);
+      } catch (plexError) {
+        console.error("[Scheduler] Error in Plex monitoring:", plexError);
+      }
+    }
     
     lastRunAt = new Date();
   } catch (error) {
