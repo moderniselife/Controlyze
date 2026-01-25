@@ -68,17 +68,32 @@ export default function IncidentsPage() {
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     fetchIncidents();
-  }, []);
+  }, [currentPage, itemsPerPage, statusFilter, severityFilter]);
 
   const fetchIncidents = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch("/api/incidents");
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+        status: statusFilter,
+        severity: severityFilter,
+      });
+      const response = await fetch(`/api/incidents?${params}`);
       const data = await response.json();
       if (data.success) {
         setIncidents(data.data);
+        if (data.pagination) {
+          setTotalPages(data.pagination.totalPages);
+          setTotalCount(data.pagination.totalCount);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch incidents:", error);
@@ -151,10 +166,10 @@ export default function IncidentsPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredIncidents.length) {
+    if (selectedIds.size === paginatedIncidents.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredIncidents.map((i) => i.id)));
+      setSelectedIds(new Set(paginatedIncidents.map((i) => i.id)));
     }
   };
 
@@ -215,14 +230,9 @@ export default function IncidentsPage() {
     }
   };
 
-  const filteredIncidents = incidents.filter((incident) => {
-    const matchesStatus =
-      statusFilter === "all" || incident.status === statusFilter;
-    const matchesSeverity =
-      severityFilter === "all" || incident.severity === severityFilter;
-    return matchesStatus && matchesSeverity;
-  });
-
+  // Since we're using server-side pagination, incidents are already filtered and paginated
+  const paginatedIncidents = incidents;
+  
   const openIncidents = incidents.filter(
     (i) => i.status === "open" || i.status === "investigating"
   ).length;
@@ -427,23 +437,28 @@ export default function IncidentsPage() {
       </div>
 
       {/* Select All */}
-      {filteredIncidents.length > 0 && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Checkbox
-            checked={selectedIds.size === filteredIncidents.length && filteredIncidents.length > 0}
-            onCheckedChange={toggleSelectAll}
-          />
-          <span
-            className="cursor-pointer hover:text-foreground"
-            onClick={toggleSelectAll}
-          >
-            Select all {filteredIncidents.length} incidents
-          </span>
+      {paginatedIncidents.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIds.size === paginatedIncidents.length && paginatedIncidents.length > 0}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span
+              className="cursor-pointer hover:text-foreground"
+              onClick={toggleSelectAll}
+            >
+              Select all {paginatedIncidents.length} on this page
+            </span>
+          </div>
+          <div className="text-xs">
+            Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} incidents
+          </div>
         </div>
       )}
 
       <div className="grid gap-4">
-        {filteredIncidents.map((incident) => (
+        {paginatedIncidents.map((incident) => (
           <Card key={incident.id} className={`bg-card/50 ${selectedIds.has(incident.id) ? 'ring-2 ring-primary' : ''}`}>
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
@@ -525,6 +540,70 @@ export default function IncidentsPage() {
           </Card>
         ))}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Items per page:</span>
+            <Select
+              value={itemsPerPage.toString()}
+              onValueChange={(value) => {
+                setItemsPerPage(Number(value));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[70px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+            >
+              First
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground px-4">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              Last
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

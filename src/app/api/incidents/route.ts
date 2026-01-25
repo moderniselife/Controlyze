@@ -1,12 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { incidents } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const allIncidents = await db.select().from(incidents).orderBy(desc(incidents.createdAt));
+    const searchParams = request.nextUrl.searchParams;
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "25");
+    const statusFilter = searchParams.get("status") || "all";
+    const severityFilter = searchParams.get("severity") || "all";
+    
+    // Build where conditions
+    const conditions = [];
+    if (statusFilter !== "all") {
+      conditions.push(eq(incidents.status, statusFilter));
+    }
+    if (severityFilter !== "all") {
+      conditions.push(eq(incidents.severity, severityFilter));
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count for pagination
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(incidents)
+      .where(whereClause);
+    const totalCount = Number(countResult[0]?.count || 0);
+    
+    // Get paginated results
+    const offset = (page - 1) * limit;
+    const query = db
+      .select()
+      .from(incidents)
+      .orderBy(desc(incidents.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    const allIncidents = whereClause 
+      ? await query.where(whereClause)
+      : await query;
     
     const formatted = allIncidents.map((incident) => {
       // Parse JSON fields safely
@@ -49,6 +84,12 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: formatted,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
       timestamp: new Date().toISOString(),
     }, {
       headers: {
