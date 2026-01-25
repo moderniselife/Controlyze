@@ -151,7 +151,22 @@ export default function PublicStatusPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const groupedServices = status?.services.reduce(
+  // Separate services into container-based and API-based monitoring
+  const containerServices = status?.services.filter(s => s.containers.length > 0) || [];
+  const monitoredServices = status?.services.filter(s => s.containers.length === 0) || [];
+
+  const groupedContainerServices = containerServices.reduce(
+    (acc, service) => {
+      if (!acc[service.group]) {
+        acc[service.group] = [];
+      }
+      acc[service.group].push(service);
+      return acc;
+    },
+    {} as Record<string, PublicServiceStatus[]>
+  );
+
+  const groupedMonitoredServices = monitoredServices.reduce(
     (acc, service) => {
       if (!acc[service.group]) {
         acc[service.group] = [];
@@ -292,27 +307,27 @@ export default function PublicStatusPage() {
             )}
 
             <div className="space-y-8">
-              {groupedServices &&
-                Object.entries(groupedServices).map(([group, services]) => (
-                  <div key={group}>
-                    <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-4">
-                      {group}
+              {/* Service Health Monitoring Section */}
+              {monitoredServices.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="h-4 w-4 text-purple-400" />
+                    <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+                      Service Health Monitoring
                     </h3>
-                    <div className="space-y-2">
-                      {services.map((service) => {
-                        const config = serviceStatusConfig[service.status];
-                        const isExpanded = expandedServices.has(service.name);
-                        const hasContainers = service.containers && service.containers.length > 0;
-                        return (
-                          <div key={service.name} className="space-y-1">
-                            <div
-                              onClick={() => hasContainers && toggleService(service.name)}
-                              className={`group relative overflow-hidden rounded-xl bg-white/5 border border-white/10 p-4 flex items-center justify-between hover:bg-white/[0.07] transition-all duration-300 ${hasContainers ? "cursor-pointer" : ""}`}
-                            >
+                  </div>
+                  <p className="text-xs text-zinc-600 mb-4">
+                    In-depth health checks including API availability, media accessibility, and service-specific metrics
+                  </p>
+                  <div className="space-y-2">
+                    {Object.entries(groupedMonitoredServices).map(([group, services]) => (
+                      <div key={group} className="space-y-2">
+                        {services.map((service) => {
+                          const config = serviceStatusConfig[service.status];
+                          return (
+                            <div key={service.name} className="group relative overflow-hidden rounded-xl bg-white/5 border border-white/10 p-4 flex items-center justify-between hover:bg-white/[0.07] transition-all duration-300">
                               <div className="flex items-center gap-4">
-                                <div
-                                  className={`w-2.5 h-2.5 rounded-full ${config.color} shadow-lg shadow-current/50`}
-                                />
+                                <div className={`w-2.5 h-2.5 rounded-full ${config.color} shadow-lg shadow-current/50`} />
                                 {service.icon && (
                                   <img
                                     src={service.icon}
@@ -323,54 +338,105 @@ export default function PublicStatusPage() {
                                     }}
                                   />
                                 )}
-                                <span className="font-medium text-white">
-                                  {service.displayName}
-                                </span>
-                                {hasContainers && (
-                                  <span className="text-xs text-zinc-500">
-                                    ({service.containers.length} container{service.containers.length !== 1 ? "s" : ""})
-                                  </span>
-                                )}
+                                <div>
+                                  <span className="font-medium text-white">{service.displayName}</span>
+                                  <p className="text-xs text-zinc-500">API & Media Health Check</p>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`text-sm ${
-                                    service.status === "operational"
-                                      ? "text-emerald-400"
-                                      : service.status === "degraded"
-                                      ? "text-amber-400"
-                                      : service.status === "down"
-                                      ? "text-red-400"
-                                      : "text-blue-400"
-                                  }`}
-                                >
-                                  {config.label}
-                                </span>
-                                {hasContainers && (
-                                  isExpanded ? (
-                                    <ChevronUp className="h-4 w-4 text-zinc-500" />
-                                  ) : (
-                                    <ChevronDown className="h-4 w-4 text-zinc-500" />
-                                  )
-                                )}
-                              </div>
-
-                              <div
-                                className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-linear-to-r ${
-                                  service.status === "operational"
-                                    ? "from-emerald-500/5"
-                                    : service.status === "degraded"
-                                    ? "from-amber-500/5"
-                                    : service.status === "down"
-                                    ? "from-red-500/5"
-                                    : "from-blue-500/5"
-                                } to-transparent pointer-events-none`}
-                              />
+                              <span className={`text-sm ${
+                                service.status === "operational" ? "text-emerald-400" :
+                                service.status === "degraded" ? "text-amber-400" :
+                                service.status === "down" ? "text-red-400" : "text-blue-400"
+                              }`}>
+                                {config.label}
+                              </span>
+                              <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-linear-to-r ${
+                                service.status === "operational" ? "from-emerald-500/5" :
+                                service.status === "degraded" ? "from-amber-500/5" :
+                                service.status === "down" ? "from-red-500/5" : "from-blue-500/5"
+                              } to-transparent pointer-events-none`} />
                             </div>
-                            
-                            {isExpanded && hasContainers && (
-                              <div className="ml-6 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                                {service.containers.map((container) => (
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Container Status Section */}
+              {containerServices.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Box className="h-4 w-4 text-blue-400" />
+                    <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+                      Container Status
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-600 mb-4">
+                    Docker container health and runtime status
+                  </p>
+                  {Object.entries(groupedContainerServices).map(([group, services]) => (
+                    <div key={group} className="mb-6">
+                      <h4 className="text-xs font-medium text-zinc-600 uppercase tracking-wider mb-3">
+                        {group}
+                      </h4>
+                      <div className="space-y-2">
+                        {services.map((service) => {
+                          const config = serviceStatusConfig[service.status];
+                          const isExpanded = expandedServices.has(service.name);
+                          const hasContainers = service.containers && service.containers.length > 0;
+                          return (
+                            <div key={service.name} className="space-y-1">
+                              <div
+                                onClick={() => hasContainers && toggleService(service.name)}
+                                className={`group relative overflow-hidden rounded-xl bg-white/5 border border-white/10 p-4 flex items-center justify-between hover:bg-white/[0.07] transition-all duration-300 ${hasContainers ? "cursor-pointer" : ""}`}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className={`w-2.5 h-2.5 rounded-full ${config.color} shadow-lg shadow-current/50`} />
+                                  {service.icon && (
+                                    <img
+                                      src={service.icon}
+                                      alt={service.displayName}
+                                      className="w-6 h-6 object-contain"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = "none";
+                                      }}
+                                    />
+                                  )}
+                                  <span className="font-medium text-white">{service.displayName}</span>
+                                  {hasContainers && (
+                                    <span className="text-xs text-zinc-500">
+                                      ({service.containers.length} container{service.containers.length !== 1 ? "s" : ""})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-sm ${
+                                    service.status === "operational" ? "text-emerald-400" :
+                                    service.status === "degraded" ? "text-amber-400" :
+                                    service.status === "down" ? "text-red-400" : "text-blue-400"
+                                  }`}>
+                                    {config.label}
+                                  </span>
+                                  {hasContainers && (
+                                    isExpanded ? (
+                                      <ChevronUp className="h-4 w-4 text-zinc-500" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                    )
+                                  )}
+                                </div>
+                                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-linear-to-r ${
+                                  service.status === "operational" ? "from-emerald-500/5" :
+                                  service.status === "degraded" ? "from-amber-500/5" :
+                                  service.status === "down" ? "from-red-500/5" : "from-blue-500/5"
+                                } to-transparent pointer-events-none`} />
+                              </div>
+                              
+                              {isExpanded && hasContainers && (
+                                <div className="ml-6 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                  {service.containers.map((container: ContainerInfo) => (
                                   <div
                                     key={container.id}
                                     className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/5"
@@ -401,6 +467,8 @@ export default function PublicStatusPage() {
                     </div>
                   </div>
                 ))}
+                </div>
+              )}
             </div>
 
             {/* Uptime History Graph */}
