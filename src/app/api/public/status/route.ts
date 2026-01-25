@@ -3,7 +3,7 @@ import { listContainers } from "@/lib/docker/containers";
 import { getOverallUptime } from "@/lib/uptime/tracker";
 import { loadRawConfig } from "@/lib/config";
 import { db } from "@/lib/db";
-import { incidents, uptimeRecords, incidentUpdates } from "@/lib/db/schema";
+import { incidents, uptimeRecords, incidentUpdates, plexMonitorLogs } from "@/lib/db/schema";
 import { desc, gte, asc, eq, and } from "drizzle-orm";
 import { recordUptime, determineServiceStatus } from "@/lib/uptime/recorder";
 
@@ -313,7 +313,38 @@ export async function GET() {
 
     const services = Array.from(serviceMap.values());
 
-    services.sort((a, b) => {
+    // Add Plex Media Server monitoring if available
+    try {
+      const latestPlexCheck = await db
+        .select()
+        .from(plexMonitorLogs)
+        .orderBy(desc(plexMonitorLogs.timestamp))
+        .limit(1);
+
+      if (latestPlexCheck.length > 0) {
+        const plexLog = latestPlexCheck[0];
+        const plexStatus: PublicServiceStatus["status"] = 
+          plexLog.isHealthy && plexLog.mediaAvailable ? "operational" :
+          plexLog.isHealthy && !plexLog.mediaAvailable ? "degraded" :
+          "down";
+
+        // Add or update Plex Media Server service
+        serviceMap.set("Plex Media Server", {
+          name: "Plex Media Server",
+          displayName: "Plex Media Server",
+          status: plexStatus,
+          group: "Media",
+          icon: SERVICE_ICONS["plex"],
+          containers: [], // Plex monitoring is API-based, not container-based
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch Plex monitoring data:", err);
+    }
+
+    const servicesArray = Array.from(serviceMap.values());
+
+    servicesArray.sort((a, b) => {
       const groupOrder = ["Media", "Indexing", "Automation", "Infrastructure"];
       return (
         groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group) ||
@@ -323,12 +354,24 @@ export async function GET() {
 
     // Record uptime for each service (throttled to once per minute via database check)
     try {
-      const uptimeChecks = services.map((svc) => ({
-        serviceName: svc.name,
-        status: determineServiceStatus(
-          svc.containers.map((c) => ({ state: c.state, healthStatus: c.healthStatus }))
-        ),
-      }));
+      const uptimeChecks = servicesArray.map((svc) => {
+        // For Plex Media Server, use its status directly since it's API-based
+        if (svc.name === "Plex Media Server") {
+          return {
+            serviceName: svc.name,
+            status: svc.status === "operational" ? "operational" as const :
+                    svc.status === "degraded" ? "degraded" as const :
+                    "down" as const,
+          };
+        }
+        // For container-based services, determine status from containers
+        return {
+          serviceName: svc.name,
+          status: determineServiceStatus(
+            svc.containers.map((c) => ({ state: c.state, healthStatus: c.healthStatus }))
+          ),
+        };
+      });
       await recordUptime(uptimeChecks);
     } catch (err) {
       console.error("Failed to record uptime:", err);
@@ -411,9 +454,9 @@ export async function GET() {
       : null;
 
     const response = {
-      overall: getOverallStatus(services, serviceConfigs),
+      overall: getOverallStatus(servicesArray, serviceConfigs),
       lastUpdated: new Date().toISOString(),
-      services,
+      services: servicesArray,
       incidents: publicIncidents,
       uptime: {
         last24h: uptime24h,
