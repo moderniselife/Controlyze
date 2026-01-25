@@ -378,6 +378,15 @@ export default function IncidentsPage() {
               <SelectItem value="info">Info</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant={statusFilter === "resolved" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setStatusFilter(statusFilter === "resolved" ? "all" : "resolved")}
+            className="gap-2"
+          >
+            <CheckSquare className="h-4 w-4" />
+            {statusFilter === "resolved" ? "Show All" : "Show Resolved"}
+          </Button>
         </div>
 
         {/* Bulk Actions */}
