@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadConfig, loadRawConfig, saveRawConfig, resetConfigCache } from "@/lib/config";
+import { loadRawConfig, saveRawConfig, resetConfigCache } from "@/lib/config";
+
+const SECRET_PLACEHOLDER = "********";
+
+function maskSecret(value: unknown): string {
+  return typeof value === "string" && value.length > 0 ? SECRET_PLACEHOLDER : "";
+}
+
+function preserveSecret(incoming: unknown, current: unknown): unknown {
+  if (incoming === undefined || incoming === null || incoming === "") {
+    return current;
+  }
+
+  if (incoming === SECRET_PLACEHOLDER) {
+    return current;
+  }
+
+  return incoming;
+}
 
 export async function GET() {
   try {
@@ -9,17 +27,17 @@ export async function GET() {
       success: true,
       discord: {
         enabled: config.discord?.enabled || false,
-        webhookUrl: config.discord?.webhookUrl || "",
-        botToken: config.discord?.botToken || "",
+        webhookUrl: maskSecret(config.discord?.webhookUrl),
+        botToken: maskSecret(config.discord?.botToken),
       },
       ticketing: {
         provider: config.ticketing?.provider || "linear",
         linear: {
-          apiKey: (config.ticketing as any)?.linear?.apiKey || "",
+          apiKey: maskSecret((config.ticketing as any)?.linear?.apiKey),
           teamId: (config.ticketing as any)?.linear?.teamId || "",
         },
         github: {
-          token: (config.ticketing as any)?.github?.token || "",
+          token: maskSecret((config.ticketing as any)?.github?.token),
           owner: (config.ticketing as any)?.github?.owner || "",
           repo: (config.ticketing as any)?.github?.repo || "",
         },
@@ -43,8 +61,8 @@ export async function POST(request: NextRequest) {
       config.discord = {
         ...config.discord,
         enabled: body.discord.enabled ?? config.discord?.enabled ?? false,
-        webhookUrl: body.discord.webhookUrl || config.discord?.webhookUrl,
-        botToken: body.discord.botToken || config.discord?.botToken,
+        webhookUrl: preserveSecret(body.discord.webhookUrl, config.discord?.webhookUrl),
+        botToken: preserveSecret(body.discord.botToken, config.discord?.botToken),
       };
     }
 
@@ -58,7 +76,7 @@ export async function POST(request: NextRequest) {
       if (body.ticketing.linear) {
         ticketing.linear = {
           ...ticketing.linear,
-          apiKey: body.ticketing.linear.apiKey || ticketing.linear?.apiKey,
+          apiKey: preserveSecret(body.ticketing.linear.apiKey, ticketing.linear?.apiKey),
           teamId: body.ticketing.linear.teamId || ticketing.linear?.teamId,
         };
       }
@@ -66,7 +84,7 @@ export async function POST(request: NextRequest) {
       if (body.ticketing.github) {
         ticketing.github = {
           ...ticketing.github,
-          token: body.ticketing.github.token || ticketing.github?.token,
+          token: preserveSecret(body.ticketing.github.token, ticketing.github?.token),
           owner: body.ticketing.github.owner || ticketing.github?.owner,
           repo: body.ticketing.github.repo || ticketing.github?.repo,
         };

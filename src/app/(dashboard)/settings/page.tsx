@@ -26,7 +26,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -35,7 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { PlexMonitorSettings } from "@/components/settings/PlexMonitorSettings";
 
@@ -1253,35 +1251,10 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Enable Container Actions</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Allow start/stop/restart from the UI
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Confirm Destructive Actions</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Require confirmation before stopping containers
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Enable Exec</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Allow executing commands in containers (disabled by default)
-                  </p>
-                </div>
-                <Switch />
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Container actions are available to authenticated administrators.
+                Command execution is not implemented.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

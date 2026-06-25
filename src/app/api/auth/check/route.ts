@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const authEnabled = isAuthEnabled();
-    
+
     if (!authEnabled) {
       return NextResponse.json({
         authEnabled: false,
@@ -21,18 +21,15 @@ export async function GET(request: NextRequest) {
     if (!sessionId) {
       const cookieHeader = request.headers.get("cookie") || "";
       const cookies = Object.fromEntries(
-        cookieHeader.split("; ").map((c) => {
+        cookieHeader.split(";").map((c) => {
           const [key, ...val] = c.split("=");
-          return [key, val.join("=")];
+          return [key.trim(), val.join("=")];
         })
       );
       sessionId = cookies[SESSION_COOKIE];
     }
-    
-    console.log(`[Auth Check] Session cookie present: ${!!sessionId}, value: ${sessionId?.substring(0, 8) || 'none'}...`);
-    
+
     if (!sessionId) {
-      console.log(`[Auth Check] No session cookie found`);
       return NextResponse.json({
         authEnabled: true,
         authenticated: false,
@@ -40,7 +37,6 @@ export async function GET(request: NextRequest) {
     }
 
     const username = await validateSession(sessionId);
-    console.log(`[Auth Check] Validation result: ${username || 'null'}`);
     const authenticated = username !== null;
 
     return NextResponse.json({
@@ -49,10 +45,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Auth check error:", error);
-    return NextResponse.json({
-      authEnabled: false,
-      authenticated: true,
-      error: "Auth check failed",
-    });
+    return NextResponse.json(
+      {
+        authEnabled: true,
+        authenticated: false,
+        error: "Auth check failed",
+      },
+      { status: 500 }
+    );
   }
 }

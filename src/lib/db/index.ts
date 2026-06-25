@@ -95,7 +95,7 @@ sqlite.exec(`
     runbook TEXT,
     log_excerpts TEXT,
     discord_thread_id TEXT,
-    is_public INTEGER DEFAULT 1,
+    is_public INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     mitigated_at INTEGER,
@@ -195,7 +195,7 @@ sqlite.exec(`
 
 // Run migrations for new columns on existing tables
 safeAddColumn("incidents", "affected_services", "TEXT");
-safeAddColumn("incidents", "is_public", "INTEGER DEFAULT 1");
+safeAddColumn("incidents", "is_public", "INTEGER DEFAULT 0");
 
 export const db = drizzle(sqlite, { schema });
 

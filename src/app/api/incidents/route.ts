@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       runbook: body.runbook || null,
       logExcerpts: body.logExcerpts ? JSON.stringify(body.logExcerpts) : null,
       discordThreadId: body.discordThreadId || null,
+      isPublic: body.isPublic === true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

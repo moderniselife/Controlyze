@@ -84,6 +84,18 @@ function parseDuration(duration: string | undefined): number {
   }
 }
 
+function isSafeLogRegex(pattern: string): boolean {
+  if (pattern.length > 200) {
+    return false;
+  }
+
+  // Block common catastrophic-backtracking shapes such as (a+)+, (.*)*,
+  // nested quantified groups, and ambiguous alternation inside quantified groups.
+  const nestedQuantifiers = /\((?:[^()\\]|\\.)*[+*](?:[^()\\]|\\.)*\)[+*{]/;
+  const ambiguousAlternation = /\((?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)[+*{]/;
+  return !nestedQuantifiers.test(pattern) && !ambiguousAlternation.test(pattern);
+}
+
 // Check if container name matches filter (supports wildcards like "flaresolverr*")
 function matchesContainerFilter(containerName: string, filter: string | undefined): boolean {
   if (!filter) return true; // No filter = match all
@@ -343,12 +355,17 @@ async function evaluateCondition(
       if (!pattern) {
         return { triggered: false, message: "" };
       }
-      
+
       // Strip (?i) inline flag - JS doesn't support it, we add 'i' flag instead
       const hasInlineIgnoreCase = pattern.includes("(?i)");
       pattern = pattern.replace(/\(\?i\)/g, "");
       if (excludePattern) {
         excludePattern = excludePattern.replace(/\(\?i\)/g, "");
+      }
+
+      if (!isSafeLogRegex(pattern) || (excludePattern && !isSafeLogRegex(excludePattern))) {
+        console.warn(`[Alerts] Ignoring unsafe log regex for alert ${alertId}`);
+        return { triggered: false, message: "" };
       }
       
       try {
@@ -558,7 +575,7 @@ export async function evaluateAlerts(): Promise<EvaluationResult[]> {
             affectedContainers: JSON.stringify([container.id]),
             affectedServices: JSON.stringify([container.name]),
             logExcerpts: context?.logs || null,
-            isPublic: true,
+            isPublic: false,
             createdAt: new Date(),
             updatedAt: new Date(),
           });

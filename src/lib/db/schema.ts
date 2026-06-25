@@ -82,7 +82,7 @@ export const incidents = sqliteTable("incidents", {
   runbook: text("runbook"),
   logExcerpts: text("log_excerpts"),
   discordThreadId: text("discord_thread_id"),
-  isPublic: integer("is_public", { mode: "boolean" }).default(true), // Show on status page
+  isPublic: integer("is_public", { mode: "boolean" }).default(false), // Only show on status page when explicitly published
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   mitigatedAt: integer("mitigated_at", { mode: "timestamp" }),
