@@ -77,6 +77,29 @@ const DEFAULT_IMPACT: Record<string, "critical" | "major" | "minor"> = {
   pd_zurg: "major",
 };
 
+function normalizeStatusDomain(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const domain = value.trim().toLowerCase();
+  if (!domain) {
+    return "";
+  }
+
+  if (
+    domain.length > 253 ||
+    domain.includes("/") ||
+    domain.includes(":") ||
+    domain === "localhost" ||
+    !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(domain)
+  ) {
+    throw new Error("Invalid status page domain");
+  }
+
+  return domain;
+}
+
 export async function GET() {
   try {
     const config = loadRawConfig();
@@ -236,10 +259,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const config = loadRawConfig();
 
+    const domain = normalizeStatusDomain(body.domain);
+
     config.statusPage = {
       enabled: body.enabled ?? true,
       title: body.title || "System Status",
-      domain: body.domain || "",
+      domain,
       services: body.services || [],
       containers: body.containers || {},
     };

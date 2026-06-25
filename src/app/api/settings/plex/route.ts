@@ -72,12 +72,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const currentSettings = await getCurrentSettings();
+    const plexUrl = body.plexUrl ?? DEFAULT_SETTINGS.plexUrl;
+    const existingUrl = currentSettings?.plexUrl ?? DEFAULT_SETTINGS.plexUrl;
+    const preservingToken = body.plexToken === "••••••••";
+    const preservedToken = preservingToken && plexUrl === existingUrl
+      ? (currentSettings?.plexToken || "")
+      : "";
+
+    if (preservingToken && plexUrl !== existingUrl) {
+      return NextResponse.json(
+        { success: false, error: "Plex token must be re-entered when changing the Plex URL" },
+        { status: 400 }
+      );
+    }
+
     const plexSettings: PlexSettings = {
       enabled: body.enabled ?? DEFAULT_SETTINGS.enabled,
-      plexUrl: body.plexUrl ?? DEFAULT_SETTINGS.plexUrl,
-      plexToken: body.plexToken === "••••••••" 
-        ? (await getCurrentToken()) 
-        : (body.plexToken ?? DEFAULT_SETTINGS.plexToken),
+      plexUrl,
+      plexToken: preservingToken ? preservedToken : (body.plexToken ?? DEFAULT_SETTINGS.plexToken),
       plexContainerName: body.plexContainerName ?? DEFAULT_SETTINGS.plexContainerName,
       zurgContainerName: body.zurgContainerName ?? DEFAULT_SETTINGS.zurgContainerName,
       checkIntervalSeconds: body.checkIntervalSeconds ?? DEFAULT_SETTINGS.checkIntervalSeconds,
@@ -124,7 +137,7 @@ export async function POST(request: Request) {
   }
 }
 
-async function getCurrentToken(): Promise<string> {
+async function getCurrentSettings(): Promise<PlexSettings | null> {
   try {
     const result = await db
       .select()
@@ -133,10 +146,10 @@ async function getCurrentToken(): Promise<string> {
 
     if (result.length > 0) {
       const plexSettings = JSON.parse(result[0].value) as PlexSettings;
-      return plexSettings.plexToken || "";
+      return plexSettings;
     }
   } catch (error) {
-    console.error("Error getting current token:", error);
+    console.error("Error getting current Plex settings:", error);
   }
-  return "";
+  return null;
 }

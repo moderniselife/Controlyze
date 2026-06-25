@@ -5,73 +5,57 @@ const SESSION_COOKIE = "controlyze_session";
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ["/login", "/status", "/api/public", "/api/auth"];
 
-// Cache for status domain fetched from API
-let cachedStatusDomain: string | null = null;
-let cacheTime = 0;
-const CACHE_DURATION = 60000; // 1 minute cache
-
 function isStatusDomain(host: string, configuredDomain: string | null): boolean {
+  const hostname = host.split(":")[0].toLowerCase();
+
   // Check against configured domain first
-  if (configuredDomain && host.includes(configuredDomain)) {
+  if (configuredDomain && hostname === configuredDomain.toLowerCase()) {
     return true;
   }
-  
+
   // Fallback: check for common status subdomain patterns
-  const hostname = host.split(":")[0]; // Remove port if present
   if (hostname.startsWith("status.") || hostname.startsWith("status-")) {
     return true;
   }
-  
+
   return false;
 }
 
-async function getConfiguredStatusDomain(request: NextRequest): Promise<string | null> {
-  // Check environment variable first (fast path)
-  if (process.env.STATUS_PAGE_DOMAIN) {
-    return process.env.STATUS_PAGE_DOMAIN;
-  }
-  
-  // Return cached value if still valid
-  const now = Date.now();
-  if (cachedStatusDomain !== null && now - cacheTime < CACHE_DURATION) {
-    return cachedStatusDomain || null;
+async function validateSessionCookie(request: NextRequest): Promise<boolean> {
+  const sessionCookie = request.cookies.get(SESSION_COOKIE);
+  if (!sessionCookie?.value) {
+    return false;
   }
 
-  // Try to fetch from internal API using main app origin
-  // Note: This may fail on status subdomain, which is why we have fallback patterns
   try {
-    const baseUrl = request.nextUrl.origin;
-    const response = await fetch(`${baseUrl}/api/internal/status-domain`, {
-      headers: { "x-internal-request": "true" },
+    const response = await fetch(new URL("/api/auth/check", request.url), {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+      cache: "no-store",
     });
+
     if (response.ok) {
       const data = await response.json();
-      const domain = data.domain || "";
-      cachedStatusDomain = domain;
-      cacheTime = now;
-      return domain || null;
+      return data.authenticated === true;
     }
   } catch {
-    // API call failed - likely on status subdomain, use fallback patterns
+    // Fail closed if the auth check cannot be completed.
   }
 
-  cachedStatusDomain = "";
-  cacheTime = now;
-  return null;
+  return false;
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") || "";
-  
-  // Skip API calls for internal requests to prevent loops
-  if (pathname.startsWith("/api/internal/")) {
-    return NextResponse.next();
-  }
-  
+
   // Check if this is the status page domain
-  const configuredDomain = await getConfiguredStatusDomain(request);
-  
+  // Custom status domains must be provided via STATUS_PAGE_DOMAIN. The user-editable
+  // statusPage.domain config is intentionally not trusted by middleware, otherwise a
+  // forged admin request could persistently lock the dashboard behind /status.
+  const configuredDomain = process.env.STATUS_PAGE_DOMAIN || null;
+
   if (isStatusDomain(host, configuredDomain)) {
     // This is the status page domain - redirect root to /status
     if (pathname === "/" || pathname === "") {
@@ -85,17 +69,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/status", request.url));
   }
 
-  // Allow public routes
-  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next();
-  }
-
   // Allow static files and Next.js internals
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.includes(".")
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/vercel.svg" ||
+    pathname === "/file.svg" ||
+    pathname === "/window.svg"
   ) {
+    return NextResponse.next();
+  }
+
+  // Allow public routes
+  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();
   }
 
@@ -105,13 +93,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session cookie - if it exists, allow through
-  // Actual session validation happens in API routes/pages
-  const sessionCookie = request.cookies.get(SESSION_COOKIE);
-  
-  if (sessionCookie?.value) {
-    // Session cookie exists - let the request through
-    // Server-side validation will happen in the actual route
+  const authenticated = await validateSessionCookie(request);
+  if (authenticated) {
     return NextResponse.next();
   }
 

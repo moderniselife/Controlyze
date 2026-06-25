@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import { restartContainer } from "@/lib/docker/containers";
 
 export async function POST() {
   try {
@@ -17,23 +14,11 @@ export async function POST() {
       );
     }
 
-    // Use Docker socket to restart the container
-    // This requires the Docker socket to be mounted
-    try {
-      await execAsync(`docker restart ${containerId}`);
-      return NextResponse.json({ success: true, message: "Restart initiated" });
-    } catch (dockerError) {
-      // If direct docker command fails, try using curl to Docker API
-      try {
-        await execAsync(`curl -X POST --unix-socket /var/run/docker.sock http://localhost/containers/${containerId}/restart`);
-        return NextResponse.json({ success: true, message: "Restart initiated" });
-      } catch (curlError) {
-        // Last resort - just exit the process and let Docker restart policy handle it
-        console.log("Initiating process exit for restart...");
-        setTimeout(() => process.exit(0), 1000);
-        return NextResponse.json({ success: true, message: "Restart initiated via process exit" });
-      }
-    }
+    // Use Docker socket to restart the container. Do not fall back to
+    // process.exit(); unauthenticated or accidental calls should never be able
+    // to kill the management process if Docker restart is unavailable.
+    await restartContainer(containerId);
+    return NextResponse.json({ success: true, message: "Restart initiated" });
   } catch (error) {
     console.error("Error restarting container:", error);
     return NextResponse.json(

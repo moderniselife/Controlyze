@@ -22,19 +22,16 @@ function generateSessionId(): string {
 export function isAuthEnabled(): boolean {
   try {
     const config = loadRawConfig();
-    console.log("Auth: isAuthEnabled check, auth.enabled =", config.auth?.enabled);
     return config.auth?.enabled === true;
   } catch (e) {
     console.error("Auth: isAuthEnabled error:", e);
-    return false;
+    return true;
   }
 }
 
 export function getUsers(): User[] {
   try {
     const config = loadRawConfig();
-    console.log("Auth: getUsers check, provider =", config.auth?.provider);
-    console.log("Auth: local users count =", config.auth?.local?.users?.length || 0);
     if (!config.auth?.enabled || config.auth.provider !== "local") {
       return [];
     }
@@ -53,15 +50,11 @@ export async function validateCredentials(
   const user = users.find((u) => u.username === username);
 
   if (!user) {
-    console.log("Auth: User not found:", username);
-    console.log("Auth: Available users:", users.map(u => u.username));
     return false;
   }
 
   try {
-    const result = await bcrypt.compare(password, user.passwordHash);
-    console.log("Auth: Password validation result:", result);
-    return result;
+    return bcrypt.compare(password, user.passwordHash);
   } catch (error) {
     console.error("Auth: bcrypt error:", error);
     return false;
@@ -80,29 +73,22 @@ export async function createSession(username: string): Promise<string> {
     createdAt,
   });
   
-  console.log(`[Auth] Session created in DB: ${sessionId.substring(0, 8)}... for user ${username}`);
-
   return sessionId;
 }
 
 export async function validateSession(sessionId: string): Promise<string | null> {
-  console.log(`[Auth] Validating session: ${sessionId.substring(0, 8)}...`);
-  
   const result = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
   const session = result[0];
 
   if (!session) {
-    console.log(`[Auth] Session not found in DB`);
     return null;
   }
 
   if (new Date() > session.expiresAt) {
-    console.log(`[Auth] Session expired, deleting`);
     await db.delete(sessions).where(eq(sessions.id, sessionId));
     return null;
   }
 
-  console.log(`[Auth] Session valid for user: ${session.username}`);
   return session.username;
 }
 
@@ -118,7 +104,6 @@ export async function cleanupExpiredSessions(): Promise<void> {
 export async function getSessionFromCookies(): Promise<string | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE);
-  console.log(`[Auth] getSessionFromCookies: cookie present = ${!!sessionCookie}, value = ${sessionCookie?.value?.substring(0, 8) || 'none'}...`);
   return sessionCookie?.value || null;
 }
 

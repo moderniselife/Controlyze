@@ -152,11 +152,12 @@ async function getPlexLibraries(
   plexToken: string,
   monitoredLibraries?: string[]
 ): Promise<PlexLibrary[]> {
-  const url = `${plexUrl}/library/sections?X-Plex-Token=${plexToken}`;
+  const url = `${plexUrl}/library/sections`;
   
   const response = await fetch(url, {
     headers: {
       Accept: "application/json",
+      "X-Plex-Token": plexToken,
     },
   });
 
@@ -200,11 +201,12 @@ async function checkLibraryAvailability(
   libraryKey: string
 ): Promise<boolean> {
   try {
-    const url = `${plexUrl}/library/sections/${libraryKey}/all?X-Plex-Token=${plexToken}&X-Plex-Container-Size=1`;
+    const url = `${plexUrl}/library/sections/${libraryKey}/all?X-Plex-Container-Size=1`;
     
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
+        "X-Plex-Token": plexToken,
       },
       signal: AbortSignal.timeout(10000),
     });

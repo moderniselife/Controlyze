@@ -51,7 +51,6 @@ export interface PublicIncident {
   status: "open" | "investigating" | "identified" | "monitoring" | "mitigated" | "resolved";
   severity: "minor" | "major" | "critical";
   affectedServices?: string[];
-  logExcerpts?: string;
   updates: PublicIncidentUpdate[];
   createdAt: string;
   updatedAt: string;
@@ -428,7 +427,6 @@ export async function GET() {
           status: mapStatus(inc.status),
           severity: inc.severity === "critical" ? "critical" as const : inc.severity === "high" ? "major" as const : "minor" as const,
           affectedServices: inc.affectedServices ? JSON.parse(inc.affectedServices) : undefined,
-          logExcerpts: inc.logExcerpts || undefined,
           updates: updates.map((u) => ({
             id: u.id,
             status: u.status,
